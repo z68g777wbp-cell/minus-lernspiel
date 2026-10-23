@@ -160,8 +160,8 @@
 
     // right buttons
     pointsBtn.classList.add("ctrlBtn");
-    pointsBtn.textContent = "Zehner / Einer";
-    pointsBtn.title = "Zehnerstangen und Einerwürfel ein- oder ausblenden";
+    pointsBtn.innerHTML = '<span class="placeValueIcon"><span class="placeZ">Z</span><span class="placeE">E</span></span> <span>Stellenwerte</span>';
+    pointsBtn.title = "Bildliche Darstellung von Zehnern (Z) und Einern (E) ein- oder ausblenden";
     nextBtn.classList.add("ctrlBtn");
     nextBtn.textContent = "➜";
     endBtn.classList.add("ctrlBtn");
@@ -956,15 +956,20 @@
     const col = qs(`[data-ones-col="${colId}"]`, layer);
     if(!col) return;
 
-    let anchor = null;
-    if(String(colId)==="main"){
-      anchor = getOnesSlotEl(fieldKey);
-    } else {
-      const slotIdx = parseInt(colId,10);
-      anchor = getSlotEl(fieldKey, slotIdx);
-    }
+    // Alle Einergruppen liegen direkt nebeneinander rechts neben den Zehnerstangen.
+    // So wird kein Zehner zwischen übrig gebliebenen Einern angezeigt.
+    const anchor = getOnesSlotEl(fieldKey);
     if(!anchor) return;
-    col.style.left = `${anchor.offsetLeft}px`;
+    const layerCols = qsa('[data-ones-col]', layer);
+    const ordered = [...layerCols].sort((a,b) => {
+      if(a.dataset.onesCol === "main") return -1;
+      if(b.dataset.onesCol === "main") return 1;
+      return parseInt(a.dataset.onesCol,10) - parseInt(b.dataset.onesCol,10);
+    });
+    const colIndex = Math.max(0, ordered.indexOf(col));
+    const cubeWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--cube")) || 16;
+    const cubeGap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--cubeGap")) || 3;
+    col.style.left = `${anchor.offsetLeft + colIndex * (cubeWidth + cubeGap)}px`;
   }
 
   function updateAllOnesColsPositions(fieldKey){
