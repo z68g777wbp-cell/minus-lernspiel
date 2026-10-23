@@ -9,7 +9,7 @@
   const HOLD_AFTER_RESULT_MS = 850;
 
   const TEN_SPACER = 16;
-  const MAX_TENS_SLOTS = 9; // 9 Z-Spalten + 1 E-Spalte (Spalte 10)
+  const MAX_TENS_SLOTS = 9; // Bis zu neun positionsgetreue Spalten
 
   const state = {
     level: 1,
@@ -878,9 +878,7 @@
     return w;
   }
 
-  // main ones column is fixed to the dedicated ones slot (column 10)
-  // (Keeping earlier "n+1" was possible, but this variant guarantees no overlap in small widths.)
-  // If your current logic uses n+1 columns, you can restore that—clipping fix remains independent.
+  // Urspruengliche Einer stehen unmittelbar rechts vom letzten Zehner.
   function ensureSlots(fieldKey){
     const f = fieldEl(fieldKey);
     if(!f) return;
@@ -956,20 +954,14 @@
     const col = qs(`[data-ones-col="${colId}"]`, layer);
     if(!col) return;
 
-    // Alle Einergruppen liegen direkt nebeneinander rechts neben den Zehnerstangen.
-    // So wird kein Zehner zwischen übrig gebliebenen Einern angezeigt.
-    const anchor = getOnesSlotEl(fieldKey);
+    // 34: Einer Spalte 4, aufgeloester Zehner Spalte 3.
+    // 74: Einer Spalte 8, aufgeloester Zehner Spalte 7.
+    // Auch beim Verschieben in Rot/Gelb bleiben diese Positionen gleich.
+    const anchor = colId === "main"
+      ? (getSlotEl(fieldKey, state.baseTens + 1) || getOnesSlotEl(fieldKey))
+      : getSlotEl(fieldKey, Number(colId));
     if(!anchor) return;
-    const layerCols = qsa('[data-ones-col]', layer);
-    const ordered = [...layerCols].sort((a,b) => {
-      if(a.dataset.onesCol === "main") return -1;
-      if(b.dataset.onesCol === "main") return 1;
-      return parseInt(a.dataset.onesCol,10) - parseInt(b.dataset.onesCol,10);
-    });
-    const colIndex = Math.max(0, ordered.indexOf(col));
-    const cubeWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--cube")) || 16;
-    const cubeGap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--cubeGap")) || 3;
-    col.style.left = `${anchor.offsetLeft + colIndex * (cubeWidth + cubeGap)}px`;
+    col.style.left = `${anchor.offsetLeft}px`;
   }
 
   function updateAllOnesColsPositions(fieldKey){
@@ -1097,7 +1089,7 @@
     return filtered.slice(0, count).map(x=>x.rod);
   }
 
-  function pickOnesFromExistingCols(fieldKey, countNeeded){
+  function pickOnesFromExistingCols(fieldKey, countNeeded, preferBroken=false){
     const layer=getOnesLayer(fieldKey);
     if(!layer) return [];
 
@@ -1107,8 +1099,9 @@
       .sort((a,b)=>parseInt(b.dataset.onesCol,10)-parseInt(a.dataset.onesCol,10));
 
     const order=[];
+    if(preferBroken) order.push(...broken);
     if(main) order.push(main);
-    order.push(...broken);
+    if(!preferBroken) order.push(...broken);
 
     const picked=[];
     for(const col of order){
@@ -1241,6 +1234,24 @@
     });
   }
 
+  // Fuer eine direkte Einer-Subtraktion, die den vorhandenen Einerrest
+  // ueberschreitet, wird der letzte Zehner aufgeloest und zuerst dort
+  // abgezogen. Bei Teilschritten (-4, danach -4) werden die freien Einer
+  // dagegen zuerst entfernt. Es wird nie mehr als ein Zehner aufgeloest.
+  async function moveOnesForSubtraction(fromKey, toKey, amount){
+    const layer = getOnesLayer(fromKey);
+    const main = layer ? qs('[data-ones-col="main"]', layer) : null;
+    const freeCount = main ? qsa('.unitCube', main).length : 0;
+    const preferBroken = amount > freeCount;
+    const existing = layer ? qsa('[data-ones-col]:not([data-ones-col="main"]) .unitCube', layer).length : 0;
+    if(amount > freeCount + existing){
+      const didBreak = breakOneTenInField(fromKey);
+      if(!didBreak) return;
+    }
+    const picked = pickOnesFromExistingCols(fromKey, amount, preferBroken);
+    await animateMoveOnes(fromKey, toKey, picked);
+  }
+
   async function applyVizDelta(delta){
     if(delta===0) return;
     coverOrange(true);
@@ -1256,37 +1267,19 @@
       const rods = pickLeftmostRods(fromKey, tensNeed);
       await animateMoveRodsBySlot(fromKey, toKey, rods);
     }
-
-    if(onesNeed>0){
-      while(pickOnesFromExistingCols(fromKey, onesNeed).length < onesNeed){
-        const ok = breakOneTenInField(fromKey);
-        if(!ok) break;
-      }
-      const ones = pickOnesFromExistingCols(fromKey, onesNeed);
-      await animateMoveOnes(fromKey, toKey, ones);
-    }
+    if(onesNeed>0) await moveOnesForSubtraction(fromKey,toKey,onesNeed);
   }
 
   async function animateAutoSubtrahendToRed(){
     coverOrange(true);
-
     const amount=state.subtrahend;
     const tensNeed=Math.floor(amount/10);
     const onesNeed=amount%10;
-
     if(tensNeed>0){
       const rods = pickLeftmostRods("orange", tensNeed);
       await animateMoveRodsBySlot("orange","red",rods);
     }
-
-    if(onesNeed>0){
-      while(pickOnesFromExistingCols("orange", onesNeed).length < onesNeed){
-        const ok = breakOneTenInField("orange");
-        if(!ok) break;
-      }
-      const ones=pickOnesFromExistingCols("orange",onesNeed);
-      await animateMoveOnes("orange","red",ones);
-    }
+    if(onesNeed>0) await moveOnesForSubtraction("orange","red",onesNeed);
   }
 
   async function animateDifferenceToYellowParallel(){
