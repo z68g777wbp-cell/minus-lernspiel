@@ -1010,8 +1010,10 @@
     if(!layer) return;
     qsa('[data-ones-col]', layer).forEach(col=>{
       updateOnesColPosition(fieldKey, col.dataset.onesCol);
-      // Die 5er-Gliederung muss sich an der aktuellen Würfelreihenfolge
-      // orientieren, nicht an der ursprünglichen Identität eines Würfels.
+      // Einer-Spalten verwenden column-reverse: DOM-Index 0 ist der unterste
+      // Würfel. Die Lücke nach fünf Würfeln muss deshalb nach dem fünften
+      // Würfel von unten liegen. Beim Abziehen verschwinden Würfel von unten;
+      // die übrigen Würfel einer angebrochenen Zehnerstange bleiben oben.
       const cubes = qsa('.unitCube', col);
       cubes.forEach((cube, index)=>cube.classList.toggle('group5', index === 4));
     });
@@ -1126,12 +1128,18 @@
   function pickLeftmostRods(fieldKey, count){
     const occ = occupiedRodSlots(fieldKey);
     let avoid=null;
-    // Nur beim ausdrücklich gewählten Schritt -10 bleibt der rechteste
-    // Zehner zum Aufbrechen stehen. Bei -nächster Zehner (z. B. -20)
-    // werden die benötigten Zehner konsequent ganz rechts weggenommen.
-    if(fieldKey==="orange" && state.reservedBreakSlot && state.currentChosenDelta === -10){
-      const slot=getSlotEl("orange", state.reservedBreakSlot);
-      if(slot && qs(".tenRod", slot)) avoid=state.reservedBreakSlot;
+    // Bei der Strategie "minus nächster Zehner" (z. B. -40 bei 53-37)
+    // werden die benötigten Zehner ganz rechts weggenommen, auch wenn der
+    // ganz rechte Zehner anschließend zum Aufbrechen gebraucht wird.
+    // Bei der Strategie "minus Z" (z. B. -30) bleibt dieser rechte Zehner
+    // dagegen stehen; die Zehner in den Spalten 2, 3 und 4 wandern nach unten.
+    if(fieldKey==="orange" && state.reservedBreakSlot){
+      const subE = state.subtrahend % 10;
+      const nextTenDelta = -(state.subtrahend + 10 - subE);
+      if(state.currentChosenDelta !== nextTenDelta){
+        const slot=getSlotEl("orange", state.reservedBreakSlot);
+        if(slot && qs(".tenRod", slot)) avoid=state.reservedBreakSlot;
+      }
     }
     const filtered = avoid && count < occ.length
       ? occ.filter(x=>x.idx!==avoid)
