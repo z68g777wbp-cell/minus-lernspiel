@@ -208,12 +208,21 @@ body{
 
 .onesCol{
   position:absolute;
-  top:auto;
-  bottom:10px;
   display:flex;
-  flex-direction:column-reverse;
   gap: var(--cubeGap);
   align-items:flex-start;
+}
+/* Ursprüngliche Einer: von unten nach oben; Unterkante bündig mit dem unteren Einer der Zehnerstange. */
+.onesCol.mainOnesCol{
+  top:auto;
+  bottom:calc(10px + var(--rodPad) + var(--rodBorder));
+  flex-direction:column-reverse;
+}
+/* Einer aus einer angebrochenen Zehnerstange bleiben oben, damit die Zehnerstange optisch wieder zusammengesetzt werden kann. */
+.onesCol.brokenOnesCol{
+  top:calc(var(--rodPad) + var(--rodBorder));
+  bottom:auto;
+  flex-direction:column;
 }
 
 .vizCover{
@@ -392,11 +401,11 @@ body{
 .fly { transition:transform 650ms ease; }
 .vizCover { transition:opacity 120ms ease; }
 .roundOverlay { z-index:20000; }
-.roundCard { position:relative; z-index:2; text-align:center; padding:28px 24px; }
-.roundMessage { font-size:21px; line-height:1.3; margin:4px 0 10px; }
-.roundTime { font-size:19px; line-height:1.3; margin:0 0 18px; }
-.bigScore { display:block; width:100%; text-align:center; font-size:clamp(64px,13vw,96px); line-height:1; color:#16803c; padding:0; margin:0 auto; }
-.celebration { margin:0 0 12px; }
+.roundCard { position:relative; z-index:2; text-align:center; padding:28px 24px; border:2px solid #dedede; border-radius:18px; box-shadow:0 8px 28px rgba(0,0,0,.12); }
+.roundCard h2 { font-size:28px; }
+.roundMessage { font-size:21px; line-height:1.4; margin:16px 0; }
+.bigScore { display:inline-block; font-size:clamp(54px,12vw,88px); line-height:1; color:#16803c; padding:0 5px; vertical-align:middle; }
+.celebration { margin:16px 0; }
 .stars { font-size:30px; letter-spacing:4px; }
 .thumbs { font-size:76px; line-height:1.1; animation:thumbPop .55s ease-out both; }
 .starRain { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:1; }

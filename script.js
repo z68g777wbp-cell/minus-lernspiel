@@ -743,7 +743,9 @@
     } else if(score >= 15){
       celebration='<div class="celebration thumbs" aria-label="Daumen hoch">👍</div>';
     }
-    card.innerHTML=`${celebration}<div class="bigScore">${score}</div><p class="roundMessage">von ${ROUND_TASKS} richtig</p><p class="roundTime">Zeit: ${fmtTime(totalSec)}</p>`;
+    const celebrationRow = score >= 15 ? celebration : "";
+    const wrongRow = score >= 15 ? `<div class="row"><span>Falsch</span><span>${state.stats.wrong}</span></div>` : "";
+    card.innerHTML=`<h2>Geschafft!</h2><p class="roundMessage">Du hast <strong class="bigScore">${score}</strong> von ${ROUND_TASKS} Aufgaben richtig gelöst.</p>${wrongRow}<div class="row"><span>Benötigte Zeit</span><span>${fmtTime(totalSec)}</span></div>${celebrationRow}`;
     const btn=document.createElement("button");
     btn.textContent="Noch einmal spielen";
     btn.onclick=()=>{
@@ -981,7 +983,7 @@
     if(col) return col;
 
     col = document.createElement("div");
-    col.className="onesCol";
+    col.className = "onesCol" + (colId === "main" ? " mainOnesCol" : " brokenOnesCol");
     col.dataset.onesCol = String(colId);
     layer.appendChild(col);
 
@@ -1010,10 +1012,8 @@
     if(!layer) return;
     qsa('[data-ones-col]', layer).forEach(col=>{
       updateOnesColPosition(fieldKey, col.dataset.onesCol);
-      // Einer-Spalten verwenden column-reverse: DOM-Index 0 ist der unterste
-      // Würfel. Die Lücke nach fünf Würfeln muss deshalb nach dem fünften
-      // Würfel von unten liegen. Beim Abziehen verschwinden Würfel von unten;
-      // die übrigen Würfel einer angebrochenen Zehnerstange bleiben oben.
+      // Die 5er-Gliederung muss sich an der aktuellen Würfelreihenfolge
+      // orientieren, nicht an der ursprünglichen Identität eines Würfels.
       const cubes = qsa('.unitCube', col);
       cubes.forEach((cube, index)=>cube.classList.toggle('group5', index === 4));
     });
@@ -1128,14 +1128,12 @@
   function pickLeftmostRods(fieldKey, count){
     const occ = occupiedRodSlots(fieldKey);
     let avoid=null;
-    // Bei der Strategie "minus nächster Zehner" (z. B. -40 bei 53-37)
-    // werden die benötigten Zehner ganz rechts weggenommen, auch wenn der
-    // ganz rechte Zehner anschließend zum Aufbrechen gebraucht wird.
-    // Bei der Strategie "minus Z" (z. B. -30) bleibt dieser rechte Zehner
-    // dagegen stehen; die Zehner in den Spalten 2, 3 und 4 wandern nach unten.
+    // Beim Schritt zum nächsten Zehner (z. B. -40 bei 53-37)
+    // werden die Zehner ganz rechts beginnend weggenommen. Bei -Z (z. B. -30)
+    // bleibt der rechte Zehner stehen, damit genau die linken drei wandern.
     if(fieldKey==="orange" && state.reservedBreakSlot){
-      const subE = state.subtrahend % 10;
-      const nextTenDelta = -(state.subtrahend + 10 - subE);
+      const subE=state.subtrahend%10;
+      const nextTenDelta=-(state.subtrahend + 10 - subE);
       if(state.currentChosenDelta !== nextTenDelta){
         const slot=getSlotEl("orange", state.reservedBreakSlot);
         if(slot && qs(".tenRod", slot)) avoid=state.reservedBreakSlot;
@@ -1170,10 +1168,11 @@
     const picked=[];
     for(const col of order){
       const cubes=qsa(".unitCube", col);
-      // Einer stehen in einer von unten nach oben aufgebauten Spalte.
-      // Daher wird beim Wegnehmen immer der unterste (erste DOM-)Würfel gewählt.
-      while(cubes.length && picked.length<countNeeded){
-        picked.push(cubes.shift());
+      // In der Hauptspalte ist das erste DOM-Element wegen column-reverse
+      // der unterste Würfel. In aufgelösten Spalten ist es der oberste.
+      for(const cube of cubes){
+        if(picked.length>=countNeeded) break;
+        picked.push(cube);
       }
       if(picked.length>=countNeeded) break;
     }
