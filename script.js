@@ -736,6 +736,9 @@
     card.className="sessionCard roundCard";
     const score=state.stats.correct;
     const totalSec=state.stats.elapsedSec;
+
+    // Rückmeldung wie vereinbart: Ergebnis, „von 20 richtig“ und Zeit.
+    // 18–20: Sternenregen; 15–17: Daumen hoch; 0–14: keine zusätzliche Grafik.
     let celebration="";
     if(score >= 18){
       celebration='<div class="celebration stars" aria-label="Sternenregen">⭐ ✨ 🌟 ⭐ ✨ 🌟 ⭐</div>';
@@ -743,9 +746,8 @@
     } else if(score >= 15){
       celebration='<div class="celebration thumbs" aria-label="Daumen hoch">👍</div>';
     }
-    const celebrationRow = score >= 15 ? celebration : "";
-    const wrongRow = score >= 15 ? `<div class="row"><span>Falsch</span><span>${state.stats.wrong}</span></div>` : "";
-    card.innerHTML=`<h2>Geschafft!</h2><p class="roundMessage">Du hast <strong class="bigScore">${score}</strong> von ${ROUND_TASKS} Aufgaben richtig gelöst.</p>${wrongRow}<div class="row"><span>Benötigte Zeit</span><span>${fmtTime(totalSec)}</span></div>${celebrationRow}`;
+
+    card.innerHTML=`<div class="roundFeedback" aria-live="polite"><div class="bigScore">${score}</div><div class="scoreLabel">von ${ROUND_TASKS} richtig</div><div class="roundTime">Zeit: ${fmtTime(totalSec)}</div>${celebration}</div>`;
     const btn=document.createElement("button");
     btn.textContent="Noch einmal spielen";
     btn.onclick=()=>{

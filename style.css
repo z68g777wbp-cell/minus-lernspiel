@@ -409,8 +409,10 @@ body{
 .vizCover { transition:opacity 120ms ease; }
 .roundOverlay { z-index:20000; }
 .roundCard { position:relative; z-index:2; text-align:center; padding:28px 24px; border:2px solid #dedede; border-radius:18px; box-shadow:0 8px 28px rgba(0,0,0,.12); }
-.roundCard h2 { font-size:28px; }
-.roundMessage { font-size:21px; line-height:1.4; margin:16px 0; }
+.roundFeedback { text-align:center; }
+.roundFeedback .bigScore { display:block; font-size:clamp(76px,16vw,120px); font-weight:900; line-height:1; color:#16803c; padding:0; margin:0 auto 8px; }
+.scoreLabel { font-size:clamp(22px,4vw,30px); font-weight:800; line-height:1.2; }
+.roundTime { font-size:clamp(20px,3.5vw,26px); margin-top:12px; }
 .bigScore { display:inline-block; font-size:clamp(54px,12vw,88px); line-height:1; color:#16803c; padding:0 5px; vertical-align:middle; }
 .celebration { margin:16px 0; }
 .stars { font-size:30px; letter-spacing:4px; }
