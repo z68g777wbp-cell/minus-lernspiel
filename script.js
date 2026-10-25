@@ -743,9 +743,7 @@
     } else if(score >= 15){
       celebration='<div class="celebration thumbs" aria-label="Daumen hoch">👍</div>';
     }
-    const celebrationRow = score >= 15 ? celebration : "";
-    const wrongRow = score >= 15 ? `<div class="row"><span>Falsch</span><span>${state.stats.wrong}</span></div>` : "";
-    card.innerHTML=`<h2>Geschafft!</h2><p class="roundMessage">Du hast <strong class="bigScore">${score}</strong> von ${ROUND_TASKS} Aufgaben richtig gelöst.</p>${wrongRow}<div class="row"><span>Benötigte Zeit</span><span>${fmtTime(totalSec)}</span></div>${celebrationRow}`;
+    card.innerHTML=`${celebration}<div class="bigScore">${score}</div><p class="roundMessage">von ${ROUND_TASKS} richtig</p><p class="roundTime">Zeit: ${fmtTime(totalSec)}</p>`;
     const btn=document.createElement("button");
     btn.textContent="Noch einmal spielen";
     btn.onclick=()=>{
@@ -983,7 +981,7 @@
     if(col) return col;
 
     col = document.createElement("div");
-    col.className = "onesCol" + (colId === "main" ? " mainOnesCol" : " brokenOnesCol");
+    col.className="onesCol";
     col.dataset.onesCol = String(colId);
     layer.appendChild(col);
 
@@ -1164,8 +1162,10 @@
     const picked=[];
     for(const col of order){
       const cubes=qsa(".unitCube", col);
+      // Einer stehen in einer von unten nach oben aufgebauten Spalte.
+      // Daher wird beim Wegnehmen immer der unterste (erste DOM-)Würfel gewählt.
       while(cubes.length && picked.length<countNeeded){
-        picked.push(cubes.pop());
+        picked.push(cubes.shift());
       }
       if(picked.length>=countNeeded) break;
     }
