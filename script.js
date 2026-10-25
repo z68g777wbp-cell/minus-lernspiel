@@ -472,7 +472,7 @@
   }
 
   // =========================================================
-  // Auto-check (1s debounce)
+  // Auto-check (1.25s debounce)
   // =========================================================
   function attachAutoCheck(inputEl, fnCheck){
     let t=null;
@@ -996,6 +996,10 @@
     if(!layer) return;
     qsa('[data-ones-col]', layer).forEach(col=>{
       updateOnesColPosition(fieldKey, col.dataset.onesCol);
+      // Die 5er-Gliederung muss sich an der aktuellen Würfelreihenfolge
+      // orientieren, nicht an der ursprünglichen Identität eines Würfels.
+      const cubes = qsa('.unitCube', col);
+      cubes.forEach((cube, index)=>cube.classList.toggle('group5', index === 4));
     });
   }
 
@@ -1298,6 +1302,10 @@
       await animateMoveRodsBySlot(fromKey, toKey, rods);
     }
     if(onesNeed>0) await moveOnesForSubtraction(fromKey,toKey,onesNeed);
+    // Beim letzten +E-Schritt werden keine Zehner bewegt; nur die Einer
+    // wandern zurück. Das orange Feld bleibt dabei wie vorgesehen abgedeckt.
+    updateAllOnesColsPositions(fromKey);
+    updateAllOnesColsPositions(toKey);
   }
 
   async function animateAutoSubtrahendToRed(){
