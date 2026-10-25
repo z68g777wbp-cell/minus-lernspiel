@@ -482,7 +482,7 @@
         const v=parseInt(inputEl.value,10);
         if(Number.isNaN(v)) return;
         fnCheck(v);
-      }, 1000);
+      }, 1250);
     });
   }
 
@@ -624,11 +624,7 @@
       inputEl.classList.add("correct");
       onSolvedCorrect();
     } else {
-      if(!state.wrongCountedThisTask){
-        state.stats.wrong += 1;
-        state.wrongCountedThisTask = true;
-        updateCounters();
-      }
+      markTaskWrong();
       inputEl.classList.add("incorrect");
       setTimeout(()=>{
         inputEl.value="";
@@ -642,6 +638,15 @@
         inputEl.focus();
       }, 1000);
     }
+  }
+
+  function markTaskWrong(){
+    // Pro Aufgabe zählt höchstens ein Fehler. Sobald ein Rechenschritt
+    // beim ersten Versuch falsch war, bleibt die gesamte Aufgabe falsch.
+    if(state.wrongCountedThisTask) return;
+    state.wrongCountedThisTask = true;
+    state.stats.wrong += 1;
+    updateCounters();
   }
 
   function validateStepInput(stepIndex, v){
@@ -664,6 +669,11 @@
     if(v===expected){
       input.classList.remove("incorrect");
       input.classList.add("correct");
+      // Ein korrektes Zwischenergebnis wird gesperrt. Das Kind arbeitet
+      // ausschließlich mit dem nächsten Rechenschritt weiter.
+      input.readOnly = true;
+      input.setAttribute("aria-label", "Richtiges Zwischenergebnis, Eingabe gesperrt");
+      input.blur();
       state.currentValue = expected;
 
       if(stepIndex===0){
@@ -677,8 +687,7 @@
       }
     } else {
       input.classList.add("incorrect");
-      state.stats.wrong += 1;
-      updateCounters();
+      markTaskWrong();
 
       setTimeout(()=>{
         input.value="";
@@ -698,7 +707,9 @@
     if(state.taskFinished) return;
     state.taskFinished = true;
     if(state.coverTimer){ clearTimeout(state.coverTimer); state.coverTimer=null; }
-    state.stats.correct += 1;
+    if(!state.wrongCountedThisTask){
+      state.stats.correct += 1;
+    }
     state.stats.completed += 1;
     updateCounters();
     showSuccess();
@@ -722,6 +733,7 @@
     const card=document.createElement("div");
     card.className="sessionCard roundCard";
     const score=state.stats.correct;
+    const totalSec=state.stats.elapsedSec;
     let celebration="";
     if(score >= 18){
       celebration='<div class="celebration stars" aria-label="Sternenregen">⭐ ✨ 🌟 ⭐ ✨ 🌟 ⭐</div>';
@@ -729,7 +741,7 @@
     } else if(score >= 14){
       celebration='<div class="celebration thumbs" aria-label="Daumen hoch">👍</div>';
     }
-    card.innerHTML=`<h2>Geschafft!</h2><p class="roundMessage">Du hast <strong class="bigScore">${score}</strong> von ${ROUND_TASKS} Aufgaben richtig gelöst.</p>${celebration}`;
+    card.innerHTML=`<h2>Geschafft!</h2><p class="roundMessage">Du hast <strong class="bigScore">${score}</strong> von ${ROUND_TASKS} Aufgaben richtig gelöst.</p><div class="row"><span>Falsch</span><span>${state.stats.wrong}</span></div><div class="row"><span>Benötigte Zeit</span><span>${fmtTime(totalSec)}</span></div>${celebration}`;
     const btn=document.createElement("button");
     btn.textContent="Noch einmal spielen";
     btn.onclick=()=>{
@@ -1116,8 +1128,15 @@
       const slot=getSlotEl("orange", state.reservedBreakSlot);
       if(slot && qs(".tenRod", slot)) avoid=state.reservedBreakSlot;
     }
-    const filtered = avoid ? occ.filter(x=>x.idx!==avoid) : occ;
+    // Wenn der gewählte Schritt alle vorhandenen Zehner abzieht (z. B. -40
+    // bei 41 - 39), darf der reservierte Zehner nicht zurückgehalten werden.
+    const filtered = avoid && count < occ.length
+      ? occ.filter(x=>x.idx!==avoid)
+      : occ;
     if(state.level === 4){
+      // Bei Level 4 folgen die Zehner stets von rechts nach links dem gewählten
+      // Rechenweg. So liegen die verbleibenden Einer nach -nächster Zehner
+      // in den gewünschten benachbarten Spalten.
       return filtered.slice().sort((a,b)=>b.idx-a.idx).slice(0,count).map(x=>x.rod);
     }
     return filtered.slice(0, count).map(x=>x.rod);
