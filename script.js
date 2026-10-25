@@ -1014,10 +1014,15 @@
   function updateAllOnesColsPositions(fieldKey){
     const layer = getOnesLayer(fieldKey);
     if(!layer) return;
+    // Minuend (orange) und Differenz (gelb): Einer liegen oben.
+    // Subtrahend (rot): Einer liegen unten.
+    const fromBottom = fieldKey === "red";
     qsa('[data-ones-col]', layer).forEach(col=>{
       updateOnesColPosition(fieldKey, col.dataset.onesCol);
-      // Die 5er-Gliederung muss sich an der aktuellen Würfelreihenfolge
-      // orientieren, nicht an der ursprünglichen Identität eines Würfels.
+      col.classList.toggle("onesFromBottom", fromBottom);
+      col.classList.toggle("onesFromTop", !fromBottom);
+      // Die 5er-Trennung sitzt immer zwischen dem fünften und sechsten
+      // Würfel, unabhängig davon, ob die Spalte oben oder unten verankert ist.
       const cubes = qsa('.unitCube', col);
       cubes.forEach((cube, index)=>cube.classList.toggle('group5', index === 4));
     });
@@ -1172,11 +1177,10 @@
     const picked=[];
     for(const col of order){
       const cubes=qsa(".unitCube", col);
-      const isMain = col.dataset.onesCol === "main";
-      // Main uses column-reverse: first DOM cube is at the bottom.
-      // Broken tens are top-anchored in normal column order: last cube is bottom.
+      // In beiden Orientierungen liegt das zu entfernende Ende beim letzten
+      // DOM-Kind: Minuend/Differenz werden von unten, Subtrahend von oben abgetragen.
       while(cubes.length && picked.length<countNeeded){
-        picked.push(isMain ? cubes.shift() : cubes.pop());
+        picked.push(cubes.pop());
       }
       if(picked.length>=countNeeded) break;
     }

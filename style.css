@@ -204,7 +204,6 @@ body{
   border: 1px solid rgba(0,0,0,0.18);
 }
 .unitCube.group5{ margin-bottom: var(--cubeGap5); }
-.onesCol .unitCube.group5{ margin-bottom:0; margin-top:var(--cubeGap5); }
 
 .onesCol{
   position:absolute;
@@ -212,17 +211,25 @@ body{
   gap: var(--cubeGap);
   align-items:flex-start;
 }
-/* Ursprüngliche Einer: von unten nach oben; Unterkante bündig mit dem unteren Einer der Zehnerstange. */
-.onesCol.mainOnesCol{
+/* Minuend und Differenz: Einer von oben aufbauen, beim Wegnehmen unten beginnen. */
+.onesCol.onesFromTop{
+  top:calc(var(--rodPad) + var(--rodBorder));
+  bottom:auto;
+  flex-direction:column;
+}
+.onesCol.onesFromTop .unitCube.group5{
+  margin-bottom:var(--cubeGap5);
+  margin-top:0;
+}
+/* Subtrahend: Einer von unten aufbauen, beim +x-Wegnehmen oben beginnen. */
+.onesCol.onesFromBottom{
   top:auto;
   bottom:calc(10px + var(--rodPad) + var(--rodBorder));
   flex-direction:column-reverse;
 }
-/* Einer aus einer angebrochenen Zehnerstange bleiben oben, damit die Zehnerstange optisch wieder zusammengesetzt werden kann. */
-.onesCol.brokenOnesCol{
-  top:calc(var(--rodPad) + var(--rodBorder));
-  bottom:auto;
-  flex-direction:column;
+.onesCol.onesFromBottom .unitCube.group5{
+  margin-bottom:0;
+  margin-top:var(--cubeGap5);
 }
 
 .vizCover{
