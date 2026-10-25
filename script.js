@@ -123,9 +123,9 @@
 
     // level buttons
     let lvlBtns = qsa(".lvlBtn");
-    if(lvlBtns.length < 4){
+    if(lvlBtns.length < 6){
       const tmp = document.createElement("div");
-      for(let i=1;i<=4;i++){
+      for(let i=lvlBtns.length+1;i<=6;i++){
         const b = document.createElement("button");
         b.className = "lvlBtn";
         b.dataset.level = String(i);
@@ -137,8 +137,17 @@
 
     const levelWrap = document.createElement("div");
     levelWrap.id = "levelButtonsWrap";
-    lvlBtns.slice(0,4).forEach((b,i)=>{
-      b.textContent = "⭐".repeat(i+1);
+    const labels = [
+      ["ZR 10", ""],
+      ["ZR 20", ""],
+      ["ZR 100", "Z-E"],
+      ["ZR 100", "ZE-E oUS"],
+      ["ZR 100", "ZE-E mUS"],
+      ["ZR 100", "ZE-ZE mUS"]
+    ];
+    lvlBtns.slice(0,6).forEach((b,i)=>{
+      b.innerHTML = `<span class="lvlMain">${labels[i][0]}</span><span class="lvlSub">${labels[i][1] || "&nbsp;"}</span>`;
+      b.setAttribute("aria-label", labels[i].filter(Boolean).join(": "));
       levelWrap.appendChild(b);
     });
     topLeft.appendChild(levelWrap);
@@ -343,19 +352,33 @@
     let m=0, s=0;
 
     if(level === 1){
-      const Z=rnd(1,9), E=rnd(1,9);
-      m=Z*10+E;
-      s=rnd(1, E-1);
-    } else if(level === 2){
-      const Z=rnd(1,9);
-      m=Z*10;
-      s=rnd(1, Math.min(9,m));
+      // ZR 10: beide Zahlen höchstens 10, Subtrahend nicht größer als Minuend.
+      m=rnd(2,10);
+      s=rnd(1,m);
+    } else if(level === 2 || level === 5){
+      // ZR 20 (Level 2) und ZE-E mit Überschreiten (Level 5):
+      // Die Einer des Subtrahenden sind größer als die Einer des Minuenden.
+      if(level === 2){
+        m=rnd(11,20);
+        const startE=m%10;
+        s=rnd(startE+1, Math.min(9,m));
+      } else {
+        const Z=rnd(1,9);
+        const startE=rnd(1,8);
+        m=Z*10+startE;
+        s=rnd(startE+1, 9);
+      }
     } else if(level === 3){
-      const Z=rnd(1,9);
-      const startE=rnd(1,8);
-      m=Z*10+startE;
-      s=rnd(startE+1, 9);   // sub < 10
+      // Z-E: glatte Zehner minus Einer.
+      m=rnd(1,9)*10;
+      s=rnd(1,9);
+    } else if(level === 4){
+      // ZE-E ohne Überschreiten des Zehners.
+      const Z=rnd(1,9), E=rnd(2,9);
+      m=Z*10+E;
+      s=rnd(1,E-1);
     } else {
+      // ZE-ZE mit Überschreiten des Zehners.
       m=rnd(31,95);
       const startE=m%10;
       const subE=rnd(startE+1,9);
@@ -369,7 +392,7 @@
   // Level 4 options + ensure correct option
   // =========================================================
   function getFirstStepOptions(subE, subZ, startE, subtr){
-    if(state.level === 3){
+    if(state.level === 2 || state.level === 5){
       return [
         {text:`− ${subE}`, value:-subE, path:"all"},
         {text:`− ${startE}`, value:-startE, path:"existing"}
@@ -418,7 +441,7 @@
     ];
   }
   function ensureOptionExistsToReachCorrect(stepIndex, options){
-    if(state.level !== 4) return options;
+    if(state.level !== 6) return options;
     if(stepIndex !== 2) return options;
 
     const correctFinal = state.startNumber - state.subtrahend;
@@ -547,7 +570,7 @@
       b.onclick=async ()=>{
         if(state.isAnimating) return;
         if(stepState.chosen) return;
-        if(state.level===3 && stepIndex===1 && opt.value !== -(state.subtrahend-(state.startNumber%10))){
+        if((state.level===2 || state.level===5) && stepIndex===1 && opt.value !== -(state.subtrahend-(state.startNumber%10))){
           b.classList.add("incorrect");
           setTimeout(()=>b.classList.remove("incorrect"), 500);
           return;
@@ -679,12 +702,12 @@
       state.currentValue = expected;
 
       if(stepIndex===0){
-        if(state.level === 3){
+        if(state.level === 2 || state.level === 5){
           renderStep(1, getLevel3SecondStepOptions());
         } else {
           renderStep(1, getSecondStepOptions(state.startNumber, state.subtrahend));
         }
-      } else if(stepIndex===1 && state.level === 4){
+      } else if(stepIndex===1 && state.level === 6){
         renderStep(2, getThirdStepOptions(state.startNumber, state.subtrahend));
       }
     } else {
@@ -809,12 +832,12 @@
 
     state.coverTimer = setTimeout(async ()=>{
       coverOrange(true);
-      if(state.level <= 2){
+      if([1,3,4].includes(state.level)){
         await animateAutoSubtrahendToRed();
       }
     }, COVER_AFTER_MS);
 
-    if(state.level <= 2){
+    if([1,3,4].includes(state.level)){
       renderCalcLineWithInput();
     } else {
       renderCalculationHeader(`${m} − ${s} =`);
@@ -1153,8 +1176,8 @@
     const filtered = avoid && count < occ.length
       ? occ.filter(x=>x.idx!==avoid)
       : occ;
-    if(state.level === 4){
-      // Bei Level 4 folgen die Zehner stets von rechts nach links dem gewählten
+    if(state.level === 6){
+      // Bei Level 6 folgen die Zehner stets von rechts nach links dem gewählten
       // Rechenweg. So liegen die verbleibenden Einer nach -nächster Zehner
       // in den gewünschten benachbarten Spalten.
       return filtered.slice().sort((a,b)=>b.idx-a.idx).slice(0,count).map(x=>x.rod);
