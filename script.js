@@ -1004,7 +1004,11 @@
       ? (getSlotEl(fieldKey, state.baseTens + 1) || getOnesSlotEl(fieldKey))
       : getSlotEl(fieldKey, Number(colId));
     if(!anchor) return;
-    col.style.left = `${anchor.offsetLeft}px`;
+    // Align with the cubes inside the rod, not with the outside edge of its slot.
+    // The overlay layer is inset, so use screen coordinates relative to that layer.
+    const rodInset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rodPad")) +
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--rodBorder"));
+    col.style.left = `${anchor.getBoundingClientRect().left + rodInset - layer.getBoundingClientRect().left}px`;
   }
 
   function updateAllOnesColsPositions(fieldKey){
@@ -1168,11 +1172,11 @@
     const picked=[];
     for(const col of order){
       const cubes=qsa(".unitCube", col);
-      // In der Hauptspalte ist das erste DOM-Element wegen column-reverse
-      // der unterste Würfel. In aufgelösten Spalten ist es der oberste.
-      for(const cube of cubes){
-        if(picked.length>=countNeeded) break;
-        picked.push(cube);
+      const isMain = col.dataset.onesCol === "main";
+      // Main uses column-reverse: first DOM cube is at the bottom.
+      // Broken tens are top-anchored in normal column order: last cube is bottom.
+      while(cubes.length && picked.length<countNeeded){
+        picked.push(isMain ? cubes.shift() : cubes.pop());
       }
       if(picked.length>=countNeeded) break;
     }
