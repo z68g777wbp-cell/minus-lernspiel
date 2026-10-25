@@ -31,6 +31,8 @@
     reservedBreakSlot: null,
     currentChosenDelta: null,
     seenCalculations: new Set(),
+    taskPool: [],
+    taskPoolIndex: 0,
 
     stats: {
       correct: 0,
@@ -349,6 +351,36 @@
   // =========================================================
   // Generator
   // =========================================================
+  function buildTaskPool(level){
+    const tasks = [];
+    const add = (m, s) => { if(m >= s && s > 0) tasks.push({m, s}); };
+
+    if(level === 1){
+      for(let m=2; m<=10; m++) for(let s=1; s<=m; s++) add(m,s);
+    } else if(level === 2){
+      for(let m=11; m<=20; m++) for(let s=(m%10)+1; s<=Math.min(9,m); s++) add(m,s);
+    } else if(level === 3){
+      for(let m=10; m<=90; m+=10) for(let s=1; s<=9; s++) add(m,s);
+    } else if(level === 4){
+      for(let z=1; z<=9; z++) for(let e=2; e<=9; e++) for(let s=1; s<e; s++) add(z*10+e,s);
+    } else if(level === 5){
+      for(let z=1; z<=9; z++) for(let e=1; e<=8; e++) for(let s=e+1; s<=9; s++) add(z*10+e,s);
+    } else {
+      for(let m=31; m<=95; m++){
+        const e=m%10;
+        for(let z=1; z<Math.floor(m/10); z++){
+          for(let se=e+1; se<=9; se++) add(m,z*10+se);
+        }
+      }
+    }
+    // Shuffle once per round. Each equation is drawn from this bag only once.
+    for(let i=tasks.length-1; i>0; i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [tasks[i], tasks[j]]=[tasks[j], tasks[i]];
+    }
+    return tasks;
+  }
+
   function generateTaskForLevel(level){
     let m=0, s=0;
 
@@ -483,6 +515,8 @@
     state.stats.startTs = 0;
     state.stats.elapsedSec = 0;
     state.seenCalculations = new Set();
+    state.taskPool = buildTaskPool(state.level);
+    state.taskPoolIndex = 0;
     state.taskFinished = false;
     state.wrongCountedThisTask = false;
     updateCounters();
@@ -813,14 +847,15 @@
     state.currentValue = 0;
     state.wrongCountedThisTask = false;
 
-    // Keine Rechnung innerhalb eines Durchgangs doppelt stellen.
-    // Es werden nur 20 Aufgaben benötigt; die Wiederholungsgrenze schützt zusätzlich vor Endlosschleifen.
-    let m, s, key, attempts = 0;
-    do {
-      ({m, s} = generateTaskForLevel(state.level));
-      key = `${m}-${s}`;
-      attempts++;
-    } while(state.seenCalculations.has(key) && attempts < 1000);
+    // Aufgaben werden aus einem einmalig gemischten Pool gezogen: keine Wiederholung
+    // innerhalb eines Durchgangs, auch wenn der Zufallsgenerator dieselbe Rechnung wählen würde.
+    if(state.taskPoolIndex >= state.taskPool.length){
+      // Sicherheitsnetz: sollte ein Pool je aufgebraucht sein, nicht stillschweigend wiederholen.
+      showRoundResult();
+      return;
+    }
+    const {m, s} = state.taskPool[state.taskPoolIndex++];
+    const key = `${m}-${s}`;
     state.seenCalculations.add(key);
     state.startNumber = m;
     state.subtrahend = s;
