@@ -30,6 +30,7 @@
 
     reservedBreakSlot: null,
     currentChosenDelta: null,
+    seenCalculations: new Set(),
 
     stats: {
       correct: 0,
@@ -403,7 +404,7 @@
       {text:`- ${subFolgeZ}`, value:-subFolgeZ},
       {text:`- ${subE}`, value:-subE},
       {text:`- ${startE}`, value:-startE},
-      {text:`- ${subZ}`, value:-subZ}
+      {text: state.level === 3 && subZ === 0 ? "− 10" : `− ${subZ === 0 ? 10 : subZ}`, value: -(subZ === 0 ? 10 : subZ)}
     ];
   }
   function getLevel3SecondStepOptions(){
@@ -481,6 +482,7 @@
     state.stats.completed = 0;
     state.stats.startTs = 0;
     state.stats.elapsedSec = 0;
+    state.seenCalculations = new Set();
     state.taskFinished = false;
     state.wrongCountedThisTask = false;
     updateCounters();
@@ -811,7 +813,15 @@
     state.currentValue = 0;
     state.wrongCountedThisTask = false;
 
-    const {m,s} = generateTaskForLevel(state.level);
+    // Keine Rechnung innerhalb eines Durchgangs doppelt stellen.
+    // Es werden nur 20 Aufgaben benötigt; die Wiederholungsgrenze schützt zusätzlich vor Endlosschleifen.
+    let m, s, key, attempts = 0;
+    do {
+      ({m, s} = generateTaskForLevel(state.level));
+      key = `${m}-${s}`;
+      attempts++;
+    } while(state.seenCalculations.has(key) && attempts < 1000);
+    state.seenCalculations.add(key);
     state.startNumber = m;
     state.subtrahend = s;
     state.currentValue = m;
