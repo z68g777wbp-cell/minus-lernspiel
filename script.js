@@ -370,8 +370,8 @@
   function getFirstStepOptions(subE, subZ, startE, subtr){
     if(state.level === 3){
       return [
-        {text:`− ${subE} auf einmal`, value:-subE},
-        {text:`− ${startE}, dann den Rest`, value:-startE}
+        {text:`− ${subE}`, value:-subE, path:"all"},
+        {text:`− ${startE}`, value:-startE, path:"existing"}
       ];
     }
     const subFolgeZ = subtr + 10 - subE;
@@ -383,8 +383,14 @@
     ];
   }
   function getLevel3SecondStepOptions(){
-    const remaining = state.subtrahend - (state.startNumber % 10);
-    return [{text:`− ${remaining}`, value:-remaining}];
+    const startE = state.startNumber % 10;
+    const remaining = state.subtrahend - startE;
+    return [
+      {text:`+ ${remaining}`, value:remaining},
+      {text:`− ${remaining}`, value:-remaining},
+      {text:`− ${startE}`, value:-startE},
+      {text:`− ${state.subtrahend}`, value:-state.subtrahend}
+    ];
   }
   function getSecondStepOptions(startN, subtr){
     const subE=subtr%10;
@@ -540,7 +546,14 @@
       b.onclick=async ()=>{
         if(state.isAnimating) return;
         if(stepState.chosen) return;
+        if(state.level===3 && stepIndex===1 && opt.value !== -(state.subtrahend-(state.startNumber%10))){
+          b.classList.add("incorrect");
+          setTimeout(()=>b.classList.remove("incorrect"), 500);
+          return;
+        }
 
+        // Level 3 offers two possible first strategies. The chosen strategy
+        // alone determines the animation; do not animate before the click.
         stepState.chosen = true;
         btns.querySelectorAll(".button").forEach(x=>x.classList.remove("selected"));
         b.classList.add("selected");
@@ -778,7 +791,7 @@
 
     state.coverTimer = setTimeout(async ()=>{
       coverOrange(true);
-      if(state.level <= 3){
+      if(state.level <= 2){
         await animateAutoSubtrahendToRed();
       }
     }, COVER_AFTER_MS);
