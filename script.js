@@ -368,6 +368,12 @@
   // Level 4 options + ensure correct option
   // =========================================================
   function getFirstStepOptions(subE, subZ, startE, subtr){
+    if(state.level === 3){
+      return [
+        {text:`− ${subE} auf einmal`, value:-subE},
+        {text:`− ${startE}, dann den Rest`, value:-startE}
+      ];
+    }
     const subFolgeZ = subtr + 10 - subE;
     return [
       {text:`- ${subFolgeZ}`, value:-subFolgeZ},
@@ -375,6 +381,10 @@
       {text:`- ${startE}`, value:-startE},
       {text:`- ${subZ}`, value:-subZ}
     ];
+  }
+  function getLevel3SecondStepOptions(){
+    const remaining = state.subtrahend - (state.startNumber % 10);
+    return [{text:`− ${remaining}`, value:-remaining}];
   }
   function getSecondStepOptions(startN, subtr){
     const subE=subtr%10;
@@ -644,8 +654,12 @@
       state.currentValue = expected;
 
       if(stepIndex===0){
-        renderStep(1, getSecondStepOptions(state.startNumber, state.subtrahend));
-      } else if(stepIndex===1){
+        if(state.level === 3){
+          renderStep(1, getLevel3SecondStepOptions());
+        } else {
+          renderStep(1, getSecondStepOptions(state.startNumber, state.subtrahend));
+        }
+      } else if(stepIndex===1 && state.level === 4){
         renderStep(2, getThirdStepOptions(state.startNumber, state.subtrahend));
       }
     } else {
@@ -769,10 +783,10 @@
       }
     }, COVER_AFTER_MS);
 
-    if(state.level <= 3){
+    if(state.level <= 2){
       renderCalcLineWithInput();
     } else {
-      renderCalculationHeader(`${m} - ${s} =`);
+      renderCalculationHeader(`${m} − ${s} =`);
       const subZ = Math.floor(s/10)*10;
       renderStep(0, getFirstStepOptions(subE, subZ, startE, s));
     }
@@ -1076,16 +1090,19 @@
     return breakSpecificTenToOnes(fieldKey, occ[occ.length-1].idx);
   }
 
-  // Move from left (smallest index) for tens
+  // Level 4: Zehner möglichst weit rechts wegnehmen.
+  // Wenn Einer fehlen, bleibt der rechteste Zehner stehen und wird aufgelöst.
   function pickLeftmostRods(fieldKey, count){
     const occ = occupiedRodSlots(fieldKey);
-
     let avoid=null;
     if(fieldKey==="orange" && state.reservedBreakSlot){
       const slot=getSlotEl("orange", state.reservedBreakSlot);
       if(slot && qs(".tenRod", slot)) avoid=state.reservedBreakSlot;
     }
     const filtered = avoid ? occ.filter(x=>x.idx!==avoid) : occ;
+    if(state.level === 4){
+      return filtered.slice().sort((a,b)=>b.idx-a.idx).slice(0,count).map(x=>x.rod);
+    }
     return filtered.slice(0, count).map(x=>x.rod);
   }
 
