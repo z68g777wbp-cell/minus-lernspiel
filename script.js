@@ -29,6 +29,7 @@
     rodW: 28,
 
     reservedBreakSlot: null,
+    currentChosenDelta: null,
 
     stats: {
       correct: 0,
@@ -558,6 +559,7 @@
         btns.querySelectorAll(".button").forEach(x=>x.classList.remove("selected"));
         b.classList.add("selected");
         stepState.selectedValue = opt.value;
+        state.currentChosenDelta = opt.value;
 
         if(stepState.blinkTimer){
           clearTimeout(stepState.blinkTimer);
@@ -1124,12 +1126,13 @@
   function pickLeftmostRods(fieldKey, count){
     const occ = occupiedRodSlots(fieldKey);
     let avoid=null;
-    if(fieldKey==="orange" && state.reservedBreakSlot){
+    // Nur beim ausdrücklich gewählten Schritt -10 bleibt der rechteste
+    // Zehner zum Aufbrechen stehen. Bei -nächster Zehner (z. B. -20)
+    // werden die benötigten Zehner konsequent ganz rechts weggenommen.
+    if(fieldKey==="orange" && state.reservedBreakSlot && state.currentChosenDelta === -10){
       const slot=getSlotEl("orange", state.reservedBreakSlot);
       if(slot && qs(".tenRod", slot)) avoid=state.reservedBreakSlot;
     }
-    // Wenn der gewählte Schritt alle vorhandenen Zehner abzieht (z. B. -40
-    // bei 41 - 39), darf der reservierte Zehner nicht zurückgehalten werden.
     const filtered = avoid && count < occ.length
       ? occ.filter(x=>x.idx!==avoid)
       : occ;
