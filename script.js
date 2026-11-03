@@ -532,17 +532,32 @@
   }
 
   // =========================================================
-  // Auto-check (1.25s debounce)
+  // Auto-check only after all digits of a possible answer have been entered.
+  // Once the required digit count is present, wait 250 ms before validating.
+  // This prevents a two-digit answer such as 25 from being checked after "2".
   // =========================================================
-  function attachAutoCheck(inputEl, fnCheck){
+  function attachAutoCheck(inputEl, fnCheck, getCandidateValues){
     let t=null;
     inputEl.addEventListener("input", ()=>{
       if(t) clearTimeout(t);
       t=setTimeout(()=>{
-        const v=parseInt(inputEl.value,10);
+        const raw=String(inputEl.value ?? "").trim();
+        if(!/^\d+$/.test(raw)) return;
+        const candidates = (getCandidateValues ? getCandidateValues() : [])
+          .filter(v => Number.isFinite(v) && v >= 0);
+        const normalized = raw.replace(/^0+(?=\d)/, "");
+        const enteredDigits = normalized.length;
+        const candidateStrings = candidates.map(v => String(v));
+        const exactLength = candidateStrings.some(v => v.length === enteredDigits);
+        const stillPossiblePrefix = candidateStrings.some(v => v.startsWith(normalized) && v.length > enteredDigits);
+        const minimumRequired = candidateStrings.length ? Math.min(...candidateStrings.map(v => v.length)) : Infinity;
+        // Keep waiting while the entered digits could still become a valid
+        // one- or two-digit answer; otherwise a complete but wrong entry is checked.
+        if(!exactLength && (stillPossiblePrefix || enteredDigits < minimumRequired)) return;
+        const v=parseInt(raw,10);
         if(Number.isNaN(v)) return;
         fnCheck(v);
-      }, 1250);
+      }, 250);
     });
   }
 
@@ -571,7 +586,7 @@
     app.appendChild(wrap);
     input.focus();
 
-    attachAutoCheck(input, (v)=>validateFinalOnly(v, input));
+    attachAutoCheck(input, (v)=>validateFinalOnly(v, input), ()=>[state.startNumber - state.subtrahend]);
   }
 
   function renderCalculationHeader(text){
@@ -646,7 +661,11 @@
         stepState.inputEl = input;
 
         input.focus();
-        attachAutoCheck(input, (v)=>validateStepInput(stepIndex, v));
+        attachAutoCheck(input, (v)=>validateStepInput(stepIndex, v), ()=>{
+          const step=state.steps[stepIndex];
+          if(!step || step.selectedValue===null) return [];
+          return [state.startNumber - state.subtrahend, state.currentValue + step.selectedValue];
+        });
       };
 
       btns.appendChild(b);
