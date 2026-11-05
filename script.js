@@ -23,6 +23,7 @@
     isAnimating: false,
 
     wrongCountedThisTask: false,
+    failedAttemptsThisTask: 0,
     taskFinished: false,
 
     baseTens: 0,
@@ -532,30 +533,22 @@
   }
 
   // =========================================================
-  // Auto-check only after all digits of a possible answer have been entered.
-  // Once the required digit count is present, wait 250 ms before validating.
-  // This prevents a two-digit answer such as 25 from being checked after "2".
+  // Auto-check (1.25s debounce)
   // =========================================================
-  function attachAutoCheck(inputEl, fnCheck, getCandidateValues){
+  function attachAutoCheck(inputEl, fnCheck, expectedValue){
     let t=null;
     inputEl.addEventListener("input", ()=>{
       if(t) clearTimeout(t);
       t=setTimeout(()=>{
         const raw=String(inputEl.value ?? "").trim();
         if(!/^\d+$/.test(raw)) return;
-        const candidates = (getCandidateValues ? getCandidateValues() : [])
-          .filter(v => Number.isFinite(v) && v >= 0);
-        const normalized = raw.replace(/^0+(?=\d)/, "");
-        const enteredDigits = normalized.length;
-        const candidateStrings = candidates.map(v => String(v));
-        const exactLength = candidateStrings.some(v => v.length === enteredDigits);
-        const stillPossiblePrefix = candidateStrings.some(v => v.startsWith(normalized) && v.length > enteredDigits);
-        const minimumRequired = candidateStrings.length ? Math.min(...candidateStrings.map(v => v.length)) : Infinity;
-        // Keep waiting while the entered digits could still become a valid
-        // one- or two-digit answer; otherwise a complete but wrong entry is checked.
-        if(!exactLength && (stillPossiblePrefix || enteredDigits < minimumRequired)) return;
-        const v=parseInt(raw,10);
-        if(Number.isNaN(v)) return;
+        const expected = typeof expectedValue === "function" ? expectedValue() : expectedValue;
+        // Never validate a partial number: wait until every digit of the
+        // expected answer has been entered (e.g. 25 only after both digits).
+        const requiredDigits = String(Math.max(0, Math.trunc(expected))).length;
+        if(raw.length !== requiredDigits) return;
+        const v=Number(raw);
+        if(!Number.isFinite(v)) return;
         fnCheck(v);
       }, 250);
     });
@@ -586,7 +579,7 @@
     app.appendChild(wrap);
     input.focus();
 
-    attachAutoCheck(input, (v)=>validateFinalOnly(v, input), ()=>[state.startNumber - state.subtrahend]);
+    attachAutoCheck(input, (v)=>validateFinalOnly(v, input), ()=>state.startNumber-state.subtrahend);
   }
 
   function renderCalculationHeader(text){
@@ -620,15 +613,19 @@
 
       b.onclick=async ()=>{
         if(state.isAnimating) return;
-        if(stepState.chosen) return;
+        if(stepState.chosen && stepState.selectedValue === opt.value) return;
         if((state.level===2 || state.level===5) && stepIndex===1 && opt.value !== -(state.subtrahend-(state.startNumber%10))){
           b.classList.add("incorrect");
           setTimeout(()=>b.classList.remove("incorrect"), 500);
           return;
         }
 
-        // Level 3 offers two possible first strategies. The chosen strategy
-        // alone determines the animation; do not animate before the click.
+        // If the child changes the selected strategy, restore the visual model
+        // and replay already accepted steps before applying the new choice.
+        if(stepState.chosen){
+          if(stepState.inputEl){ stepState.inputEl.closest(".eqRow")?.remove(); stepState.inputEl=null; }
+          await rebuildVisualizationBeforeStep(stepIndex);
+        }
         stepState.chosen = true;
         btns.querySelectorAll(".button").forEach(x=>x.classList.remove("selected"));
         b.classList.add("selected");
@@ -661,11 +658,7 @@
         stepState.inputEl = input;
 
         input.focus();
-        attachAutoCheck(input, (v)=>validateStepInput(stepIndex, v), ()=>{
-          const step=state.steps[stepIndex];
-          if(!step || step.selectedValue===null) return [];
-          return [state.startNumber - state.subtrahend, state.currentValue + step.selectedValue];
-        });
+        attachAutoCheck(input, (v)=>validateStepInput(stepIndex, v), ()=>state.currentValue + stepState.selectedValue);
       };
 
       btns.appendChild(b);
@@ -682,6 +675,52 @@
         setTimeout(()=>btn.classList.remove("blink"), 520);
       });
     }, 3000);
+  }
+
+  async function rebuildVisualizationBeforeStep(stepIndex){
+    state.isAnimating = true;
+    initViz(state.startNumber);
+    state.currentValue = state.startNumber;
+    state.currentChosenDelta = null;
+    for(let i=0;i<stepIndex;i++){
+      const previous=state.steps[i];
+      if(previous && previous.selectedValue !== null){
+        await applyVizDelta(previous.selectedValue);
+        state.currentValue += previous.selectedValue;
+      }
+    }
+    state.isAnimating = false;
+  }
+
+  function resetCurrentCalculation(){
+    if(state.taskFinished) return;
+    clearTimers();
+    clearApp();
+    state.isAnimating = false;
+    state.steps = [];
+    state.currentValue = state.startNumber;
+    state.currentChosenDelta = null;
+    state.failedAttemptsThisTask = 0;
+    initViz(state.startNumber);
+    vizPanel.style.display = state.vizShown ? "block" : "none";
+    state.coverTimer = setTimeout(async ()=>{
+      coverOrange(true);
+      if([1,3,4].includes(state.level)) await animateAutoSubtrahendToRed();
+    }, COVER_AFTER_MS);
+    if([1,3,4].includes(state.level)){
+      renderCalcLineWithInput();
+    } else {
+      renderCalculationHeader(`${state.startNumber} − ${state.subtrahend} =`);
+      const subE=state.subtrahend%10;
+      const subZ=Math.floor(state.subtrahend/10)*10;
+      renderStep(0,getFirstStepOptions(subE,subZ,state.startNumber%10,state.subtrahend));
+    }
+    setTimeout(()=>{
+      fitToViewport();
+      updateAllOnesColsPositions("orange");
+      updateAllOnesColsPositions("red");
+      updateAllOnesColsPositions("yellow");
+    },0);
   }
 
   function showSuccess(){
@@ -705,7 +744,12 @@
       onSolvedCorrect();
     } else {
       markTaskWrong();
+      state.failedAttemptsThisTask += 1;
       inputEl.classList.add("incorrect");
+      if(state.failedAttemptsThisTask >= 3){
+        setTimeout(()=>resetCurrentCalculation(), 650);
+        return;
+      }
       setTimeout(()=>{
         inputEl.value="";
         inputEl.classList.remove("incorrect");
@@ -768,6 +812,11 @@
     } else {
       input.classList.add("incorrect");
       markTaskWrong();
+      state.failedAttemptsThisTask += 1;
+      if(state.failedAttemptsThisTask >= 3){
+        setTimeout(()=>resetCurrentCalculation(), 650);
+        return;
+      }
 
       setTimeout(()=>{
         input.value="";
@@ -865,6 +914,7 @@
     state.steps = [];
     state.currentValue = 0;
     state.wrongCountedThisTask = false;
+    state.failedAttemptsThisTask = 0;
 
     // Aufgaben werden aus einem einmalig gemischten Pool gezogen: keine Wiederholung
     // innerhalb eines Durchgangs, auch wenn der Zufallsgenerator dieselbe Rechnung wählen würde.
