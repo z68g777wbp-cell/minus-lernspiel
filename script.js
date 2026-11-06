@@ -3,7 +3,6 @@
   const qsa = (s, r=document) => [...r.querySelectorAll(s)];
   const rnd = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
 
-  const ROUND_TASKS = 20;
   const MOVE_MS = 650;
   const COVER_AFTER_MS = 1800;
   const HOLD_AFTER_RESULT_MS = 850;
@@ -13,6 +12,8 @@
 
   const state = {
     level: 1,
+    roundTaskCount: 20,
+    animationEnabled: true,
     startNumber: 0,
     subtrahend: 0,
     currentValue: 0,
@@ -64,7 +65,9 @@
   // Events
   pointsBtn.onclick = () => {
     state.vizShown = !state.vizShown;
+    state.animationEnabled = state.vizShown;
     vizPanel.style.display = state.vizShown ? "block" : "none";
+    updateAnimationButton();
   };
   nextBtn.onclick = () => generateNewCalculation();
   endBtn.onclick = () => endSession();
@@ -174,16 +177,35 @@
 
     // right buttons
     pointsBtn.classList.add("ctrlBtn");
-    pointsBtn.innerHTML = '<span class="placeValueIcon"><span class="placeZ">Z</span><span class="placeE">E</span></span> <span>Stellenwerte</span>';
-    pointsBtn.title = "Bildliche Darstellung von Zehnern (Z) und Einern (E) ein- oder ausblenden";
+    pointsBtn.innerHTML = '<span class="miniPlaceValue" aria-hidden="true"><span class="miniPlace miniTens">1</span><span class="miniPlace miniOnes">1</span></span>';
+    pointsBtn.title = "Animation und Stellenwertdarstellung ein- oder ausschalten";
+    pointsBtn.setAttribute("aria-label", "Animation ein- oder ausschalten");
     nextBtn.classList.add("ctrlBtn");
     nextBtn.textContent = "➜";
     endBtn.classList.add("ctrlBtn");
     endBtn.textContent = "Ende";
 
-    topRight.appendChild(pointsBtn);
-    topRight.appendChild(nextBtn);
-    topRight.appendChild(endBtn);
+    const rightTopButtons = document.createElement("div");
+    rightTopButtons.id = "rightTopButtons";
+    rightTopButtons.append(pointsBtn, nextBtn, endBtn);
+    topRight.appendChild(rightTopButtons);
+
+    const roundControls = document.createElement("div");
+    roundControls.id = "roundCountControls";
+    roundControls.setAttribute("aria-label", "Aufgaben pro Runde");
+    [5, 10, 20].forEach(count => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "roundCountBtn";
+      b.dataset.roundCount = String(count);
+      b.textContent = String(count);
+      b.setAttribute("aria-label", `${count} Aufgaben pro Runde`);
+      b.onclick = () => setRoundTaskCount(count);
+      roundControls.appendChild(b);
+    });
+    topRight.appendChild(roundControls);
+    updateAnimationButton();
+    updateRoundCountButtons();
 
     // content
     leftCol.appendChild(vizPanel);
@@ -347,6 +369,25 @@
     resetRoundStats();
     renderLevelButtons();
     generateNewCalculation();
+  }
+
+  function setRoundTaskCount(count){
+    if(![5,10,20].includes(count)) return;
+    state.roundTaskCount = count;
+    resetRoundStats();
+    updateRoundCountButtons();
+    generateNewCalculation();
+  }
+  function updateRoundCountButtons(){
+    qsa(".roundCountBtn").forEach(btn=>{
+      const active = Number(btn.dataset.roundCount) === state.roundTaskCount;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+  }
+  function updateAnimationButton(){
+    pointsBtn.classList.toggle("animation-active", !!state.animationEnabled);
+    pointsBtn.setAttribute("aria-pressed", String(!!state.animationEnabled));
   }
 
   // =========================================================
@@ -755,6 +796,8 @@
         inputEl.classList.remove("incorrect");
 
         state.vizShown = true;
+        state.animationEnabled = true;
+        updateAnimationButton();
         vizPanel.style.display = "block";
         setOrangeOpacity(1);
         setCover("orange", false);
@@ -823,6 +866,8 @@
         input.classList.remove("incorrect");
 
         state.vizShown = true;
+        state.animationEnabled = true;
+        updateAnimationButton();
         vizPanel.style.display = "block";
         setOrangeOpacity(1);
         setCover("orange", false);
@@ -845,7 +890,7 @@
 
     animateDifferenceToYellowParallel().then(()=>{
       setTimeout(()=>{
-        if(state.stats.completed >= ROUND_TASKS){
+        if(state.stats.completed >= state.roundTaskCount){
           showRoundResult();
         } else {
           generateNewCalculation();
@@ -864,17 +909,18 @@
     const score=state.stats.correct;
     const totalSec=state.stats.elapsedSec;
 
-    // Rückmeldung wie vereinbart: Ergebnis, „von 20 richtig“ und Zeit.
-    // 18–20: Sternenregen; 15–17: Daumen hoch; 0–14: keine zusätzliche Grafik.
+    // Rückmeldung abhängig von der gewählten Rundengröße.
+    const starThreshold = state.roundTaskCount === 20 ? 18 : state.roundTaskCount;
+    const thumbsThreshold = state.roundTaskCount === 5 ? 4 : state.roundTaskCount === 10 ? 8 : 15;
     let celebration="";
-    if(score >= 18){
+    if(score >= starThreshold){
       celebration='<div class="celebration stars" aria-label="Sternenregen">⭐ ✨ 🌟 ⭐ ✨ 🌟 ⭐</div>';
       startStarRain(overlay);
-    } else if(score >= 15){
+    } else if(score >= thumbsThreshold){
       celebration='<div class="celebration thumbs" aria-label="Daumen hoch">👍</div>';
     }
 
-    card.innerHTML=`<div class="roundFeedback" aria-live="polite"><div class="bigScore">${score}</div><div class="scoreLabel">von ${ROUND_TASKS} richtig</div><div class="roundTime">Zeit: ${fmtTime(totalSec)}</div>${celebration}</div>`;
+    card.innerHTML=`<div class="roundFeedback" aria-live="polite"><div class="bigScore">${score}</div><div class="scoreLabel">von ${state.roundTaskCount} richtig</div><div class="roundTime">Zeit: ${fmtTime(totalSec)}</div>${celebration}</div>`;
     const btn=document.createElement("button");
     btn.textContent="Noch einmal spielen";
     btn.onclick=()=>{
@@ -905,7 +951,7 @@
   // Task start
   // =========================================================
   function generateNewCalculation(){
-    if(state.stats.completed >= ROUND_TASKS) return;
+    if(state.stats.completed >= state.roundTaskCount) return;
     clearTimers();
     clearApp();
 

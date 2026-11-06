@@ -484,3 +484,80 @@ body{background:#f4f7fb;color:#1f2937;}
 .lvlMain { font-size: 15px; font-weight: 900; }
 .lvlSub { font-size: 11px; font-weight: 700; }
 @media (max-width: 760px) { .lvlBtn { min-width: 94px; height: 50px; padding: 4px 6px; } .lvlMain { font-size: 13px; } .lvlSub { font-size: 10px; } }
+
+/* Rechte Steuerung: gleiche Buttonmaße wie die Level-Auswahl */
+#topRight {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  justify-content:center;
+  gap:7px;
+}
+#rightTopButtons,
+#roundCountControls {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:stretch;
+  gap:7px;
+  width:100%;
+}
+#rightTopButtons .ctrlBtn,
+#roundCountControls .roundCountBtn {
+  appearance:none;
+  -webkit-appearance:none;
+  width:112px;
+  min-width:112px;
+  height:54px;
+  padding:5px 9px;
+  border:0;
+  border-radius:12px;
+  background:#e5edf7;
+  color:#26384d;
+  font:900 18px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+#roundCountControls .roundCountBtn.active {
+  background:#f6c945;
+  outline:3px solid #f2d675;
+}
+#rightTopButtons #pointsBtn {
+  width:112px;
+  min-width:112px;
+  padding:5px;
+  background:#e0eaf7;
+  border:1px solid #c6d5e7;
+}
+.miniPlaceValue { display:flex; align-items:center; justify-content:center; gap:5px; }
+.miniPlace {
+  width:27px;
+  height:32px;
+  border:1px solid #9aabc0;
+  border-radius:5px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+  font-weight:950;
+  line-height:1;
+  text-decoration:none;
+}
+.miniTens { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
+.miniOnes { background:#dcfce7; color:#15803d; border-color:#86efac; }
+#pointsBtn.animation-active .miniPlace { text-decoration:line-through; text-decoration-thickness:2px; }
+@media (max-width:980px) {
+  #topRight { align-items:center; }
+  #rightTopButtons, #roundCountControls { justify-content:center; }
+}
+@media (max-width:760px) {
+  #rightTopButtons .ctrlBtn,
+  #roundCountControls .roundCountBtn,
+  #rightTopButtons #pointsBtn {
+    width:94px;
+    min-width:94px;
+    height:50px;
+  }
+}
