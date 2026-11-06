@@ -561,3 +561,81 @@ body{background:#f4f7fb;color:#1f2937;}
     height:50px;
   }
 }
+
+/* ===== Kopfbereich und Spielfläche: optische Trennung ===== */
+#topRow {
+  background: #343a40;
+  color: #fff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  gap: 14px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .16);
+  align-items: center;
+}
+#topLeft, #topMid, #topRight { min-width: 0; }
+#topLeft { justify-content: flex-start; }
+#topRight { justify-content: flex-end; }
+#levelButtonsWrap { gap: 7px; }
+.lvlBtn { background: #f6c945; color: #20252b; }
+.lvlBtn.active { background: #ffdc70; outline: 2px solid #fff1bd; outline-offset: 1px; }
+#rightTopButtons .ctrlBtn,
+#roundCountControls .roundCountBtn,
+#rightTopButtons #pointsBtn {
+  background: #eef2f6;
+  color: #263445;
+  border: 1px solid #cbd5e1;
+}
+#roundCountControls .roundCountBtn.active {
+  background: #f6c945;
+  border-color: #f6c945;
+  outline: 2px solid #fff1bd;
+}
+#contentRow {
+  margin-top: 10px;
+  gap: 22px;
+  align-items: center;
+  overflow: visible;
+}
+#leftCol, #midCol, #rightCol {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.72);
+}
+#vizPanel, #app, #rightCol { max-height: 100%; }
+#vizPanel { width: 100%; }
+#app { width: 100%; }
+#rightCol { justify-content: center; }
+#keypad { margin: 0 auto; }
+@media (max-width: 980px) {
+  #topRow {
+    grid-template-columns: minmax(0,1fr);
+    padding: 12px;
+  }
+  #topLeft, #topRight { justify-content: center; }
+  #contentRow {
+    grid-template-columns: minmax(0,1fr);
+    gap: 14px;
+    margin-top: 12px;
+  }
+  #leftCol, #midCol, #rightCol {
+    height: auto;
+    min-height: 0;
+    padding: 10px;
+  }
+  #leftCol { order: 1; }
+  #midCol { order: 2; }
+  #rightCol { order: 3; }
+  #vizPanel, #app { max-height: none; }
+}
+@media (max-width: 520px) {
+  #topRow { border-radius: 12px; padding: 10px 8px; }
+  #levelButtonsWrap { justify-content: center; }
+  #topRight { gap: 6px; }
+  #rightTopButtons, #roundCountControls { justify-content: center; }
+  #contentRow { gap: 10px; }
+}
