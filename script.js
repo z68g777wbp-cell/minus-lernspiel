@@ -259,8 +259,8 @@
 
   function getActiveInput(){
     const ae=document.activeElement;
-    if(ae && ae.tagName==="INPUT" && ae.type==="number") return ae;
-    const inputs=qsa('input[type="number"]', app).filter(i=>i.offsetParent!==null && !i.disabled);
+    if(ae && ae.tagName==="INPUT" && ae.classList.contains("input-field")) return ae;
+    const inputs=qsa('input.input-field', app).filter(i=>i.offsetParent!==null && !i.disabled);
     return inputs.length ? inputs[inputs.length-1] : null;
   }
   function keypadTypeDigit(d){
@@ -613,8 +613,11 @@
     wrap.appendChild(txt);
 
     const input=document.createElement("input");
-    input.type="number";
+    input.type="text";
     input.className="input-field";
+    input.inputMode="none";
+    input.readOnly=true;
+    input.setAttribute("aria-label", "Ergebnis über das Ziffernfeld eingeben");
     wrap.appendChild(input);
 
     app.appendChild(wrap);
@@ -690,9 +693,11 @@
         eq.appendChild(label);
 
         const input = document.createElement("input");
-        input.type="number";
+        input.type="text";
         input.className="input-field";
-        input.inputMode="numeric";
+        input.inputMode="none";
+        input.readOnly=true;
+        input.setAttribute("aria-label", "Ergebnis über das Ziffernfeld eingeben");
         eq.appendChild(input);
 
         step.appendChild(eq);

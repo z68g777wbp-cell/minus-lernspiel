@@ -639,3 +639,176 @@ body{background:#f4f7fb;color:#1f2937;}
   #rightTopButtons, #roundCountControls { justify-content: center; }
   #contentRow { gap: 10px; }
 }
+
+/* Aktualisierte Kopfzeile: Zahlenraum oben, Steuerung darunter in zwei Gruppen */
+#topRow {
+  display:flex !important;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+}
+#topLeft {
+  width:100%;
+  display:flex;
+  justify-content:flex-start;
+}
+#levelButtonsWrap {
+  width:100%;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-start;
+  align-items:stretch;
+}
+/* Inaktive Zahlenraum-Buttons neutral grau, aktiver Button gelb */
+#levelButtonsWrap .lvlBtn {
+  background:#e5e7eb;
+  color:#263445;
+  border:1px solid #cbd5e1;
+  outline:none;
+}
+#levelButtonsWrap .lvlBtn.active {
+  background:#f6c945;
+  color:#20252b;
+  border-color:#f6c945;
+  outline:2px solid #fff1bd;
+  outline-offset:1px;
+}
+#topMid { display:none !important; }
+#topRight {
+  width:100%;
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:10px;
+  align-items:stretch;
+}
+#rightTopButtons, #roundCountControls {
+  min-width:0;
+  width:100%;
+  min-height:54px;
+  padding:5px;
+  border-radius:12px;
+  background:rgba(255,255,255,.10);
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:center;
+  gap:7px;
+}
+#rightTopButtons .ctrlBtn,
+#roundCountControls .roundCountBtn,
+#rightTopButtons #pointsBtn {
+  background:#e5e7eb;
+  color:#263445;
+  border:1px solid #cbd5e1;
+}
+#rightTopButtons .ctrlBtn:active,
+#roundCountControls .roundCountBtn.active { background:#f6c945; }
+#roundCountControls .roundCountBtn.active {
+  background:#f6c945;
+  border-color:#f6c945;
+  outline:2px solid #fff1bd;
+}
+/* Eingabe ausschließlich über das eingebaute Ziffernfeld: keine iPad-Bildschirmtastatur */
+.input-field {
+  -webkit-user-select:none;
+  user-select:none;
+  caret-color:transparent;
+  touch-action:manipulation;
+}
+.input-field[readonly] { cursor:default; }
+@media (max-width:760px) {
+  #topRight { grid-template-columns:minmax(0,1fr); }
+  #levelButtonsWrap { justify-content:center; }
+}
+
+/* Gewünschte endgültige Anordnung: Zahlenräume oben, zwei Steuerungsfelder darunter */
+#topRow {
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:100%;
+}
+#topLeft {
+  width:100%;
+  display:flex;
+  justify-content:center !important;
+  align-items:center;
+}
+#levelButtonsWrap {
+  width:100%;
+  justify-content:center !important;
+  align-items:center;
+}
+#levelButtonsWrap .lvlBtn {
+  background:#e5e7eb !important;
+  color:#263445 !important;
+  border:1px solid #cbd5e1 !important;
+  outline:none;
+}
+#levelButtonsWrap .lvlBtn.active {
+  background:#f6c945 !important;
+  color:#20252b !important;
+  border-color:#f6c945 !important;
+  outline:2px solid #fff1bd;
+  outline-offset:1px;
+}
+#topMid { display:none !important; }
+#topRight {
+  width:min(100%, 760px);
+  display:grid !important;
+  grid-template-columns:repeat(2, minmax(0, 1fr)) !important;
+  justify-content:center !important;
+  align-items:stretch;
+  gap:12px;
+}
+#rightTopButtons, #roundCountControls {
+  width:100%;
+  min-width:0;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center !important;
+  align-items:center;
+  gap:8px;
+  background:rgba(255,255,255,.10);
+  border-radius:12px;
+  padding:7px;
+}
+#rightTopButtons .ctrlBtn,
+#roundCountControls .roundCountBtn,
+#rightTopButtons #pointsBtn {
+  background:#e5e7eb !important;
+  color:#263445 !important;
+  border:1px solid #cbd5e1 !important;
+}
+#roundCountControls .roundCountBtn.active {
+  background:#f6c945 !important;
+  color:#20252b !important;
+  border-color:#f6c945 !important;
+  outline:2px solid #fff1bd;
+}
+#rightTopButtons #pointsBtn.animation-active {
+  background:#f6c945 !important;
+  border-color:#f6c945 !important;
+}
+/* Rechnung, Animation und Ziffernfeld bleiben als drei gleich hohe Spalten angeordnet. */
+#contentRow { align-items:center !important; }
+#leftCol, #midCol, #rightCol {
+  align-self:stretch;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+#rightCol { justify-content:center !important; }
+#keypad { margin:auto; }
+@media (max-width:760px) {
+  #topRight { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
+  #topRow { padding:10px 8px; }
+  #levelButtonsWrap { justify-content:center !important; }
+  #rightTopButtons, #roundCountControls { justify-content:center !important; }
+}
+@media (max-width:520px) {
+  #topRight { grid-template-columns:repeat(2, minmax(0,1fr)) !important; gap:7px; }
+  #rightTopButtons .ctrlBtn, #roundCountControls .roundCountBtn,
+  #rightTopButtons #pointsBtn { width: min(100%, 94px); min-width:0; }
+}
