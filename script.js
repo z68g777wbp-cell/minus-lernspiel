@@ -6,6 +6,10 @@
   const MOVE_MS = 650;
   const COVER_AFTER_MS = 1800;
   const HOLD_AFTER_RESULT_MS = 850;
+  const STEP_LEVEL_HOLD_MS = 1000; // Stufen mit Rechenweg (2, 5, 6): 1 s nach der gelben Animation
+  const DEAD_END_RESET_MS = 1000; // Rechenweg ohne Ziel: grünes Feld kurz zeigen, dann zurück auf Start
+  const FULLSCREEN_EDGE = 8;      // Randabstand oben/unten im Vollbild
+  const VIZ_FIELD_GAP = 10;       // entspricht margin-bottom von .vizField
 
   const TEN_SPACER = 16;
   const MAX_TENS_SLOTS = 9; // Bis zu neun positionsgetreue Spalten
@@ -14,6 +18,7 @@
     level: 1,
     roundTaskCount: 20,
     animationEnabled: true,
+    directMode: false, // Schalter „ohne Rechenschritte“ (Stufen 2, 5, 6)
     startNumber: 0,
     subtrahend: 0,
     currentValue: 0,
@@ -22,10 +27,16 @@
     vizShown: true,
     coverTimer: null,
     isAnimating: false,
+    resetPending: false,
+    resetTimer: null,
 
     wrongCountedThisTask: false,
     failedAttemptsThisTask: 0,
     taskFinished: false,
+    taskStartedAt: 0,
+    taskAttemptCount: 0,
+    helpUsedThisTask: [],
+    sessionStartedAt: 0,
 
     baseTens: 0,
     rodW: 28,
@@ -46,6 +57,19 @@
     }
   };
 
+  const pendingLearningEvents = [];
+  let platformBridgeReady = false;
+  window.addEventListener("message", event=>{
+    if(event.origin !== window.location.origin || event.source !== window.parent) return;
+    if(event.data?.source === "denkavo-platform" && event.data?.type === "ready") {
+      platformBridgeReady = true;
+      while(pendingLearningEvents.length) {
+        const item = pendingLearningEvents.shift();
+        window.parent.postMessage(item, window.location.origin);
+      }
+    }
+  });
+
   // ---------- Ensure base nodes ----------
   const app = ensureEl("div", "app", document.body);
   const vizPanel = ensureEl("div", "vizPanel", document.body);
@@ -54,6 +78,20 @@
   const pointsBtn = ensureEl("button", "pointsBtn", document.body);
   const nextBtn   = ensureEl("button", "nextBtn", document.body);
   const endBtn    = ensureEl("button", "endBtn", document.body);
+  const homeBtn   = ensureEl("button", "homeBtn", document.body);
+  const directBtn = ensureEl("button", "directBtn", document.body);
+  const fsBtn     = ensureEl("button", "fsBtn", document.body);
+
+  // Bildsymbol Animation: 2 Zehnerstangen und 3 Einerwürfel; ausgeschaltet durchgestrichen.
+  const ANIMATION_ICON_SVG = (()=>{
+    const rod = x => `<rect x="${x}" y="3" width="9" height="34" rx="2" fill="#bfdbfe" stroke="#6b9dd8" stroke-width="1.5"/>`
+      + [...Array(9)].map((_,i)=>`<line x1="${x}" x2="${x+9}" y1="${3+3.4*(i+1)}" y2="${3+3.4*(i+1)}" stroke="#6b9dd8" stroke-width="0.8"/>`).join("");
+    const cube = y => `<rect x="31" y="${y}" width="9" height="9" rx="2" fill="#bbf7d0" stroke="#65a887" stroke-width="1.5"/>`;
+    return `<svg class="animIcon" viewBox="0 0 44 40" width="44" height="40" aria-hidden="true">${rod(4)}${rod(17)}${cube(3)}${cube(14)}${cube(25)}`
+      + `<line class="animStrike" x1="2" y1="38" x2="42" y2="2" stroke="#b91c1c" stroke-width="3.5" stroke-linecap="round"/></svg>`;
+  })();
+  const FULLSCREEN_ICON_SVG = '<svg class="fsIcon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="#263445" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const HOME_ICON_SVG = '<svg class="homeIcon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2" fill="none" stroke="#263445" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 10v9.5h4.5v-5.5h4v5.5h4.5V10" fill="none" stroke="#263445" stroke-width="2.2" stroke-linejoin="round"/></svg>';
 
   const okCountEl  = ensureEl("span", "okCount", document.body);
   const badCountEl = ensureEl("span", "badCount", document.body);
@@ -61,10 +99,14 @@
   badCountEl.textContent = "0";
 
   ensureShell();
+  // Reste der ursprünglichen Startseite (leere Hüllen, „✓ ✗“) entfernen.
+  // Alle benötigten Elemente wurden zuvor in die Spieloberfläche verschoben.
+  ["hud","layout"].forEach(id=>document.getElementById(id)?.remove());
 
   // Events
   pointsBtn.onclick = () => {
     state.vizShown = !state.vizShown;
+    if(state.vizShown && !state.helpUsedThisTask.includes("visualization")) state.helpUsedThisTask.push("visualization");
     state.animationEnabled = state.vizShown;
     vizPanel.style.display = state.vizShown ? "block" : "none";
     updateAnimationButton();
@@ -73,14 +115,103 @@
   endBtn.onclick = () => endSession();
 
   renderLevelButtons();
+  fsBtn.disabled = !fullscreenSupported();
   fitToViewport();
   window.addEventListener("resize", () => {
     clearTimeout(window.__fitT);
-    window.__fitT = setTimeout(fitToViewport, 60);
+    window.__fitT = setTimeout(()=>{
+      fitToViewport();
+      if(isFullscreen()) scrollToGameArea();
+    }, 60);
   });
+
+  // =========================================================
+  // Vollbild: Jeder Tipp außerhalb des Vollbilds startet es (Hoch- und Querformat).
+  // Im Vollbild liegt das Knopffeld oberhalb des Bildschirms (durch Scrollen erreichbar).
+  // Geräte ohne Vollbild-Unterstützung (z. B. iPhone-Safari) bleiben unverändert.
+  // =========================================================
+  function fullscreenElement(){
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+  function isFullscreen(){ return !!fullscreenElement() || document.webkitIsFullScreen === true; }
+  // Vollbild startet nur über den eigenen Knopf. Keine doppelte Anfrage, solange eine läuft.
+  const fsGuard = { pending:false };
+  function fullscreenSupported(){
+    const el = document.documentElement;
+    return !!(el.requestFullscreen || el.webkitRequestFullscreen) && document.fullscreenEnabled !== false && document.webkitFullscreenEnabled !== false;
+  }
+  function requestGameFullscreen(){
+    if(isFullscreen()){ scrollToGameArea(); return; }
+    if(fsGuard.pending) return;
+    const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(!fn) return;
+    fsGuard.pending = true;
+    const done = () => { fsGuard.pending = false; };
+    setTimeout(done, 1500);
+    try {
+      const result = fn.call(el);
+      if(result && typeof result.then === "function") result.then(done, done);
+    } catch(_) { done(); /* Vollbild nicht erlaubt: Spiel läuft normal weiter. */ }
+  }
+  function scrollToGameArea(){
+    const contentRow = qs("#contentRow");
+    if(!contentRow) return;
+    if(isFullscreen()){
+      const top = contentRow.getBoundingClientRect().top + window.scrollY - FULLSCREEN_EDGE;
+      window.scrollTo(0, Math.max(0, top));
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }
+  function onFullscreenChange(){
+    fsGuard.pending = false;
+    document.documentElement.classList.toggle("is-fullscreen", isFullscreen());
+    fitToViewport();
+    requestAnimationFrame(()=>{
+      fitToViewport();
+      scrollToGameArea();
+    });
+  }
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
   updateCounters();
   setActiveLevel(1);
+
+  // Lernplattform-Brücke: Das Spiel sendet nur Ereignisse an die umgebende
+  // Plattform. Es enthält keine Datenbankzugänge und kennt keine Schüler-IDs.
+  function emitLearning(type, payload={}){
+    if(window.parent && window.parent !== window){
+      const event = {source:"denkavo-minus", type, ...payload};
+      if(platformBridgeReady) window.parent.postMessage(event, window.location.origin);
+      else pendingLearningEvents.push(event);
+    }
+  }
+  function currentCalculationSteps(){
+    return state.steps.map((step,index)=>step && step.selectedValue !== null ? {step:index+1,delta:step.selectedValue,label:`Schritt ${index+1}`} : null).filter(Boolean);
+  }
+  function recordAnswerAttempt(answer, expected, isCorrect, stepIndex=null){
+    state.taskAttemptCount += 1;
+    emitLearning("attempt", {
+      taskKey:`L${state.level}-${state.startNumber}-${state.subtrahend}`,
+      taskLabel:`${state.startNumber} − ${state.subtrahend}`,
+      givenAnswer:String(answer), expectedAnswer:String(expected), isCorrect:Boolean(isCorrect),
+      attemptNumber:state.taskAttemptCount, durationMs:Math.max(0,Date.now()-state.taskStartedAt),
+      stepIndex, calculationSteps:currentCalculationSteps(), helpUsed:[...state.helpUsedThisTask]
+    });
+  }
+  function recordTaskResult(){
+    emitLearning("task-complete", {
+      taskKey:`L${state.level}-${state.startNumber}-${state.subtrahend}`,
+      taskLabel:`${state.startNumber} − ${state.subtrahend}`,
+      expectedAnswer:String(state.startNumber-state.subtrahend),
+      isCorrect:!state.wrongCountedThisTask,
+      attemptNumber:Math.max(1,state.taskAttemptCount),
+      durationMs:Math.max(0,Date.now()-state.taskStartedAt),
+      calculationSteps:currentCalculationSteps(), helpUsed:[...state.helpUsedThisTask]
+    });
+  }
 
   // =========================================================
   // DOM helpers
@@ -177,7 +308,7 @@
 
     // right buttons
     pointsBtn.classList.add("ctrlBtn");
-    pointsBtn.innerHTML = '<span class="miniPlaceValue" aria-hidden="true"><span class="miniPlace miniTens">1</span><span class="miniPlace miniOnes">1</span></span>';
+    pointsBtn.innerHTML = ANIMATION_ICON_SVG;
     pointsBtn.title = "Animation und Stellenwertdarstellung ein- oder ausschalten";
     pointsBtn.setAttribute("aria-label", "Animation ein- oder ausschalten");
     nextBtn.classList.add("ctrlBtn");
@@ -187,7 +318,27 @@
 
     const rightTopButtons = document.createElement("div");
     rightTopButtons.id = "rightTopButtons";
-    rightTopButtons.append(pointsBtn, nextBtn, endBtn);
+    homeBtn.type = "button";
+    homeBtn.className = "ctrlBtn";
+    homeBtn.innerHTML = HOME_ICON_SVG;
+    homeBtn.title = "Zur Übersicht";
+    homeBtn.setAttribute("aria-label", "Zur Übersicht");
+    homeBtn.onclick = () => goHome();
+    // Ohne umgebende Plattform (eigenständiges Spiel) gibt es keine Übersicht: Knopf ausblenden.
+    if(window.parent === window) homeBtn.style.display = "none";
+    directBtn.type = "button";
+    directBtn.className = "ctrlBtn";
+    directBtn.innerHTML = '<span class="directIcon" aria-hidden="true"><span class="directEq">=</span><span class="directBox"></span></span>';
+    directBtn.title = "Ohne Rechenschritte: Ergebnis direkt eingeben";
+    directBtn.setAttribute("aria-label", "Ohne Rechenschritte rechnen ein- oder ausschalten");
+    directBtn.onclick = () => toggleDirectMode();
+    fsBtn.type = "button";
+    fsBtn.className = "ctrlBtn";
+    fsBtn.innerHTML = FULLSCREEN_ICON_SVG;
+    fsBtn.title = "Vollbild";
+    fsBtn.setAttribute("aria-label", "Im Vollbild spielen");
+    fsBtn.onclick = () => requestGameFullscreen();
+    rightTopButtons.append(homeBtn, fsBtn, pointsBtn, directBtn, nextBtn, endBtn);
     topRight.appendChild(rightTopButtons);
 
     const roundControls = document.createElement("div");
@@ -229,6 +380,7 @@
     for(let n=1;n<=9;n++){
       const b=document.createElement("button");
       b.className="keyBtn";
+      b.dataset.key=String(n);
       b.textContent=String(n);
       b.onclick=()=>keypadTypeDigit(String(n));
       grid.appendChild(b);
@@ -240,12 +392,14 @@
     const zero=document.createElement("button");
     zero.className="keyBtn";
     zero.id="key0";
+    zero.dataset.key="0";
     zero.textContent="0";
     zero.onclick=()=>keypadTypeDigit("0");
 
     const del=document.createElement("button");
     del.className="keyBtn";
     del.id="keyDel";
+    del.dataset.key="del";
     del.textContent="⌫";
     del.onclick=()=>keypadDelete();
 
@@ -257,17 +411,24 @@
     return kp;
   }
 
+  // Bereits kontrollierte Felder sind gesperrt: Das Ziffernfeld schreibt nie hinein.
+  function isLocked(inp){ return inp.dataset.locked === "1"; }
+  function lockInput(inp){
+    inp.dataset.locked = "1";
+    inp.readOnly = true;
+    inp.blur();
+  }
+  function unlockInput(inp){ delete inp.dataset.locked; }
   function getActiveInput(){
     const ae=document.activeElement;
-    if(ae && ae.tagName==="INPUT" && ae.classList.contains("input-field")) return ae;
-    const inputs=qsa('input.input-field', app).filter(i=>i.offsetParent!==null && !i.disabled);
+    if(ae && ae.tagName==="INPUT" && ae.classList.contains("input-field") && !isLocked(ae)) return ae;
+    const inputs=qsa('input.input-field', app).filter(i=>i.offsetParent!==null && !i.disabled && !isLocked(i));
     return inputs.length ? inputs[inputs.length-1] : null;
   }
   function keypadTypeDigit(d){
     const inp=getActiveInput();
     if(!inp) return;
     inp.value=(inp.value ?? "") + d;
-    inp.focus();
     inp.dispatchEvent(new Event("input",{bubbles:true}));
   }
   function keypadDelete(){
@@ -275,7 +436,6 @@
     if(!inp) return;
     const cur=inp.value ?? "";
     inp.value=cur.slice(0,-1);
-    inp.focus();
     inp.dispatchEvent(new Event("input",{bubbles:true}));
   }
 
@@ -289,11 +449,20 @@
     const leftCol = qs("#leftCol");
     if(!topRow || !contentRow || !leftCol) return;
 
-    const topH = topRow.getBoundingClientRect().height;
+    // Höhe des Spielbereichs: Im Vollbild füllt er genau den Bildschirm (Knopffeld liegt
+    // darüber und ist durch Scrollen erreichbar), sonst den Platz unter dem Knopffeld.
     const shellH = window.innerHeight;
-    const padding = 12*2 + 10;
-    const contentH = Math.max(240, shellH - topH - padding);
-    contentRow.style.height = `${contentH}px`;
+    let contentH;
+    if(isFullscreen()){
+      contentH = Math.max(240, shellH - 2*FULLSCREEN_EDGE);
+    } else {
+      const shell = qs("#appShell");
+      const padBottom = shell ? parseFloat(getComputedStyle(shell).paddingBottom) || 0 : 0;
+      const contentTop = contentRow.getBoundingClientRect().top + window.scrollY;
+      contentH = Math.max(240, Math.floor(shellH - contentTop - padBottom));
+    }
+    contentRow.style.setProperty("height", `${contentH}px`, "important");
+    document.documentElement.style.setProperty("--contentH", `${contentH}px`);
 
     const leftW = Math.max(260, leftCol.getBoundingClientRect().width);
 
@@ -305,8 +474,12 @@
     let rodW = Math.floor((usableW - (9*slotGap) - spacer) / 10);
     rodW = clamp(16, 44, rodW);
 
-    // Choose target field height (screen friendly)
-    const targetFieldH = clamp(160, Math.floor(contentH * 0.32), 360);
+    // Die drei Felder (orange, rot, gelb) stehen untereinander und teilen sich die
+    // Höhe der Animationsspalte zu gleichen Teilen. Der Platz für Gelb ist immer reserviert.
+    const leftCS = getComputedStyle(leftCol);
+    const leftInnerH = leftCol.clientHeight - (parseFloat(leftCS.paddingTop)||0) - (parseFloat(leftCS.paddingBottom)||0);
+    const panelPad = parseFloat(getComputedStyle(vizPanel).paddingBottom) || 0;
+    const targetFieldH = Math.max(60, Math.floor((leftInnerH - panelPad - 3*VIZ_FIELD_GAP) / 3));
 
     // Start with width-based cube
     let cube = Math.floor(rodW * 0.65);
@@ -326,7 +499,7 @@
 
       if(neededH <= targetFieldH) break;
       cube -= 1;
-      if(cube <= 7) break;
+      if(cube <= 4) break;
     }
 
     // Field height: at least what we need
@@ -343,6 +516,12 @@
 
     // Update runtime state based on measured DOM
     state.rodW = measureRodWidth();
+    // Bereits angelegte Spalten an die neue Stangenbreite anpassen (z. B. nach dem
+    // Wechsel ins Vollbild oder Drehen des Geräts mitten in einer Aufgabe).
+    qsa('[data-slot], [data-ones-slot]', vizWrap).forEach(slot=>{
+      slot.style.width = `${state.rodW}px`;
+      slot.style.minWidth = `${state.rodW}px`;
+    });
 
     updateAllOnesColsPositions("orange");
     updateAllOnesColsPositions("red");
@@ -355,6 +534,7 @@
   // Levels
   // =========================================================
   function renderLevelButtons(){
+    updateDirectButton();
     qsa(".lvlBtn").forEach(btn=>{
       const lvl = parseInt(btn.dataset.level,10);
       btn.disabled = false;
@@ -388,6 +568,43 @@
   function updateAnimationButton(){
     pointsBtn.classList.toggle("animation-active", !!state.animationEnabled);
     pointsBtn.setAttribute("aria-pressed", String(!!state.animationEnabled));
+  }
+  function levelHasSteps(level){ return [2,5,6].includes(level); }
+  // Direkte Ergebniseingabe: Stufen 1, 3, 4 immer; Stufen 2, 5, 6 bei eingeschaltetem Schalter.
+  function usesDirectInput(){ return !levelHasSteps(state.level) || state.directMode; }
+  function updateDirectButton(){
+    const available = levelHasSteps(state.level);
+    directBtn.disabled = !available;
+    directBtn.classList.toggle("direct-active", available && state.directMode);
+    directBtn.setAttribute("aria-pressed", String(available && state.directMode));
+  }
+  function toggleDirectMode(){
+    if(!levelHasSteps(state.level) || state.isAnimating || state.resetPending) return;
+    state.directMode = !state.directMode;
+    if(state.directMode){
+      // Einschalten schaltet auch die Animation aus.
+      state.vizShown = false;
+      state.animationEnabled = false;
+      vizPanel.style.display = "none";
+      updateAnimationButton();
+    }
+    updateDirectButton();
+    // Die laufende Rechnung beginnt in der neuen Form von vorne (keine neue Rechnung).
+    if(!state.taskFinished) resetCurrentCalculation();
+  }
+  // Zurück zur Lern-Übersicht. Die Sitzung wird vorher beendet; die Plattform
+  // speichert offene Ereignisse und wechselt dann zur Übersicht.
+  function goHome(){
+    if(state.sessionStartedAt){
+      emitLearning("session-end", {startedAt:state.sessionStartedAt});
+      state.sessionStartedAt = 0;
+    }
+    clearTimers();
+    if(window.parent && window.parent !== window){
+      emitLearning("exit", {});
+    } else {
+      window.location.href = "/lernen";
+    }
   }
 
   // =========================================================
@@ -533,6 +750,7 @@
   // =========================================================
   function clearTimers(){
     if(state.coverTimer){ clearTimeout(state.coverTimer); state.coverTimer=null; }
+    if(state.resetTimer){ clearTimeout(state.resetTimer); state.resetTimer=null; }
   }
   function startTaskTimer(){
     // Die Zeit läuft über die gesamte 20-Aufgaben-Runde und wird nicht pro Aufgabe zurückgesetzt.
@@ -550,6 +768,10 @@
     if(state.stats.tickTimer){ clearInterval(state.stats.tickTimer); state.stats.tickTimer=null; }
   }
   function resetRoundStats(){
+    if(state.sessionStartedAt){
+      emitLearning("session-end", {startedAt:state.sessionStartedAt});
+      state.sessionStartedAt = 0;
+    }
     stopRoundTimer();
     state.stats.correct = 0;
     state.stats.wrong = 0;
@@ -561,6 +783,8 @@
     state.taskPoolIndex = 0;
     state.taskFinished = false;
     state.wrongCountedThisTask = false;
+    state.sessionStartedAt = Date.now();
+    emitLearning("session-start", {level:state.level, roundTaskCount:state.roundTaskCount, startedAt:state.sessionStartedAt});
     updateCounters();
   }
   function updateCounters(){
@@ -577,22 +801,33 @@
   // Auto-check (1.25s debounce)
   // =========================================================
   function attachAutoCheck(inputEl, fnCheck, expectedValue){
-    let t=null;
-    inputEl.addEventListener("input", ()=>{
-      if(t) clearTimeout(t);
-      t=setTimeout(()=>{
-        const raw=String(inputEl.value ?? "").trim();
-        if(!/^\d+$/.test(raw)) return;
+    let timer = null;
+    let checkStartedAt = 0;
+    const scheduleCheck = (delay = 250) => {
+      if (timer) clearTimeout(timer);
+      checkStartedAt = Date.now();
+      const run = () => {
+        // The input may have been replaced by the next task while the timer waited.
+        if (!inputEl.isConnected || state.taskFinished || isLocked(inputEl)) return;
+        const raw = String(inputEl.value ?? "").trim();
+        if (!/^\d+$/.test(raw)) return;
         const expected = typeof expectedValue === "function" ? expectedValue() : expectedValue;
-        // Never validate a partial number: wait until every digit of the
-        // expected answer has been entered (e.g. 25 only after both digits).
         const requiredDigits = String(Math.max(0, Math.trunc(expected))).length;
-        if(raw.length !== requiredDigits) return;
-        const v=Number(raw);
-        if(!Number.isFinite(v)) return;
-        fnCheck(v);
-      }, 250);
-    });
+        // Never check a partially entered multi-digit result.
+        if (raw.length !== requiredDigits) return;
+        const value = Number(raw);
+        if (!Number.isFinite(value)) return;
+        // Animations temporarily lock validation. Retry while the same input
+        // still exists, instead of silently losing the child's auto-check.
+        if (state.isAnimating) {
+          if (Date.now() - checkStartedAt < 6000) timer = setTimeout(run, 100);
+          return;
+        }
+        fnCheck(value);
+      };
+      timer = setTimeout(run, delay);
+    };
+    inputEl.addEventListener("input", () => scheduleCheck(250));
   }
 
   // =========================================================
@@ -621,16 +856,45 @@
     wrap.appendChild(input);
 
     app.appendChild(wrap);
-    input.focus();
 
     attachAutoCheck(input, (v)=>validateFinalOnly(v, input), ()=>state.startNumber-state.subtrahend);
   }
 
   function renderCalculationHeader(text){
+    const row=document.createElement("div");
+    row.className="calcHeaderRow";
     const p=document.createElement("p");
     p.id="calculation";
     p.textContent=text;
-    app.appendChild(p);
+    row.appendChild(p);
+    app.appendChild(row);
+  }
+  // Ergebnisfeld bei der ursprünglichen Rechnung: erscheint leer mit dem Rechenschritt,
+  // der zum Ziel führt; nach der Kontrolle wird das Ergebnis eingetragen (grün).
+  // Das Feld ist immer gesperrt: Das Ziffernfeld schreibt nie hinein.
+  function ensureHeaderResultField(){
+    const row=qs(".calcHeaderRow", app);
+    if(!row) return null;
+    let f=qs("#headerResult", row);
+    if(f) return f;
+    f=document.createElement("input");
+    f.type="text";
+    f.id="headerResult";
+    f.className="input-field";
+    f.inputMode="none";
+    f.readOnly=true;
+    f.tabIndex=-1;
+    f.dataset.locked="1";
+    f.setAttribute("aria-label", "Ergebnis der Rechnung");
+    row.appendChild(f);
+    return f;
+  }
+  function removeHeaderResultField(){ qs("#headerResult", app)?.remove(); }
+  function fillHeaderResultField(value){
+    const f=ensureHeaderResultField();
+    if(!f) return;
+    f.value=String(value);
+    f.classList.add("correct");
   }
 
   // Step UI: buttons -> after 3s blink once -> click creates equation row + input
@@ -656,7 +920,7 @@
       b.textContent=opt.text;
 
       b.onclick=async ()=>{
-        if(state.isAnimating) return;
+        if(state.isAnimating || state.resetPending) return;
         if(stepState.chosen && stepState.selectedValue === opt.value) return;
         if((state.level===2 || state.level===5) && stepIndex===1 && opt.value !== -(state.subtrahend-(state.startNumber%10))){
           b.classList.add("incorrect");
@@ -668,6 +932,11 @@
         // and replay already accepted steps before applying the new choice.
         if(stepState.chosen){
           if(stepState.inputEl){ stepState.inputEl.closest(".eqRow")?.remove(); stepState.inputEl=null; }
+          // Folgeschritte des bisherigen Wegs verschwinden.
+          let next=step.nextElementSibling;
+          while(next){ const n=next.nextElementSibling; if(next.classList.contains("step")) next.remove(); next=n; }
+          state.steps.slice(stepIndex+1).forEach(st=>{ if(st && st.blinkTimer) clearTimeout(st.blinkTimer); });
+          state.steps.length = stepIndex+1;
           await rebuildVisualizationBeforeStep(stepIndex);
         }
         stepState.chosen = true;
@@ -682,6 +951,9 @@
         }
 
         await applyVizDelta(opt.value);
+
+        if(state.currentValue + opt.value === state.startNumber - state.subtrahend) ensureHeaderResultField();
+        else removeHeaderResultField();
 
         const eq = document.createElement("div");
         eq.className="eqRow";
@@ -703,7 +975,6 @@
         step.appendChild(eq);
         stepState.inputEl = input;
 
-        input.focus();
         attachAutoCheck(input, (v)=>validateStepInput(stepIndex, v), ()=>state.currentValue + stepState.selectedValue);
       };
 
@@ -743,6 +1014,7 @@
     clearTimers();
     clearApp();
     state.isAnimating = false;
+    state.resetPending = false;
     state.steps = [];
     state.currentValue = state.startNumber;
     state.currentChosenDelta = null;
@@ -751,9 +1023,9 @@
     vizPanel.style.display = state.vizShown ? "block" : "none";
     state.coverTimer = setTimeout(async ()=>{
       coverOrange(true);
-      if([1,3,4].includes(state.level)) await animateAutoSubtrahendToRed();
+      if(usesDirectInput()) await animateAutoSubtrahendToRed();
     }, COVER_AFTER_MS);
-    if([1,3,4].includes(state.level)){
+    if(usesDirectInput()){
       renderCalcLineWithInput();
     } else {
       renderCalculationHeader(`${state.startNumber} − ${state.subtrahend} =`);
@@ -785,13 +1057,17 @@
     const correct = state.startNumber - state.subtrahend;
 
     if(v===correct){
+      recordAnswerAttempt(v, correct, true, null);
       inputEl.classList.remove("incorrect");
       inputEl.classList.add("correct");
+      lockInput(inputEl);
       onSolvedCorrect();
     } else {
+      recordAnswerAttempt(v, correct, false, null);
       markTaskWrong();
       state.failedAttemptsThisTask += 1;
       inputEl.classList.add("incorrect");
+      lockInput(inputEl); // während der roten Rückmeldung gesperrt
       if(state.failedAttemptsThisTask >= 3){
         setTimeout(()=>resetCurrentCalculation(), 650);
         return;
@@ -799,6 +1075,7 @@
       setTimeout(()=>{
         inputEl.value="";
         inputEl.classList.remove("incorrect");
+        unlockInput(inputEl);
 
         state.vizShown = true;
         state.animationEnabled = true;
@@ -807,7 +1084,6 @@
         setOrangeOpacity(1);
         setCover("orange", false);
 
-        inputEl.focus();
       }, 1000);
     }
   }
@@ -831,21 +1107,24 @@
     const correctFinal = state.startNumber - state.subtrahend;
 
     if(v===correctFinal){
+      recordAnswerAttempt(v, correctFinal, true, stepIndex+1);
       input.classList.remove("incorrect");
       input.classList.add("correct");
+      lockInput(input);
+      fillHeaderResultField(correctFinal);
       onSolvedCorrect();
       return;
     }
 
     const expected = state.currentValue + step.selectedValue;
     if(v===expected){
+      recordAnswerAttempt(v, expected, true, stepIndex+1);
       input.classList.remove("incorrect");
       input.classList.add("correct");
       // Ein korrektes Zwischenergebnis wird gesperrt. Das Kind arbeitet
       // ausschließlich mit dem nächsten Rechenschritt weiter.
-      input.readOnly = true;
+      lockInput(input);
       input.setAttribute("aria-label", "Richtiges Zwischenergebnis, Eingabe gesperrt");
-      input.blur();
       state.currentValue = expected;
 
       if(stepIndex===0){
@@ -856,9 +1135,18 @@
         }
       } else if(stepIndex===1 && state.level === 6){
         renderStep(2, getThirdStepOptions(state.startNumber, state.subtrahend));
+      } else {
+        // Letzter möglicher Rechenschritt richtig gerechnet, Rechnung aber nicht gelöst:
+        // Der Rechenweg führt nicht zum Ziel. Aufgabe zählt als Fehler; dieselbe
+        // Rechnung und die Animation werden auf Start zurückgesetzt (keine neue Rechnung).
+        markTaskWrong();
+        state.resetPending = true;
+        state.resetTimer = setTimeout(()=>{ state.resetTimer=null; resetCurrentCalculation(); }, DEAD_END_RESET_MS);
       }
     } else {
+      recordAnswerAttempt(v, expected, false, stepIndex+1);
       input.classList.add("incorrect");
+      lockInput(input); // während der roten Rückmeldung gesperrt
       markTaskWrong();
       state.failedAttemptsThisTask += 1;
       if(state.failedAttemptsThisTask >= 3){
@@ -869,6 +1157,7 @@
       setTimeout(()=>{
         input.value="";
         input.classList.remove("incorrect");
+        unlockInput(input);
 
         state.vizShown = true;
         state.animationEnabled = true;
@@ -877,7 +1166,6 @@
         setOrangeOpacity(1);
         setCover("orange", false);
 
-        input.focus();
       }, 1000);
     }
   }
@@ -885,6 +1173,7 @@
   function onSolvedCorrect(){
     if(state.taskFinished) return;
     state.taskFinished = true;
+    recordTaskResult();
     if(state.coverTimer){ clearTimeout(state.coverTimer); state.coverTimer=null; }
     if(!state.wrongCountedThisTask){
       state.stats.correct += 1;
@@ -900,11 +1189,13 @@
         } else {
           generateNewCalculation();
         }
-      }, HOLD_AFTER_RESULT_MS);
+      }, [2,5,6].includes(state.level) ? STEP_LEVEL_HOLD_MS : HOLD_AFTER_RESULT_MS);
     });
   }
 
   function showRoundResult(){
+    emitLearning("session-end", {startedAt:state.sessionStartedAt});
+    state.sessionStartedAt = 0;
     clearTimers();
     stopRoundTimer();
     const overlay=document.createElement("div");
@@ -961,11 +1252,14 @@
     clearApp();
 
     state.isAnimating = false;
+    state.resetPending = false;
     state.taskFinished = false;
     state.steps = [];
     state.currentValue = 0;
     state.wrongCountedThisTask = false;
     state.failedAttemptsThisTask = 0;
+    state.taskAttemptCount = 0;
+    state.helpUsedThisTask = state.vizShown ? ["visualization"] : [];
 
     // Aufgaben werden aus einem einmalig gemischten Pool gezogen: keine Wiederholung
     // innerhalb eines Durchgangs, auch wenn der Zufallsgenerator dieselbe Rechnung wählen würde.
@@ -980,6 +1274,7 @@
     state.startNumber = m;
     state.subtrahend = s;
     state.currentValue = m;
+    state.taskStartedAt = Date.now();
 
     state.baseTens = Math.floor(m/10);
 
@@ -997,12 +1292,12 @@
 
     state.coverTimer = setTimeout(async ()=>{
       coverOrange(true);
-      if([1,3,4].includes(state.level)){
+      if(usesDirectInput()){
         await animateAutoSubtrahendToRed();
       }
     }, COVER_AFTER_MS);
 
-    if([1,3,4].includes(state.level)){
+    if(usesDirectInput()){
       renderCalcLineWithInput();
     } else {
       renderCalculationHeader(`${m} − ${s} =`);
@@ -1204,9 +1499,8 @@
   function updateAllOnesColsPositions(fieldKey){
     const layer = getOnesLayer(fieldKey);
     if(!layer) return;
-    // Minuend (orange) und Differenz (gelb): Einer liegen oben.
-    // Subtrahend (rot): Einer liegen unten.
-    const fromBottom = fieldKey === "red";
+    // Alle Felder (orange, rot, gelb): Einer bauen sich von oben auf (5er-Abstand).
+    const fromBottom = false;
     qsa('[data-ones-col]', layer).forEach(col=>{
       updateOnesColPosition(fieldKey, col.dataset.onesCol);
       col.classList.toggle("onesFromBottom", fromBottom);
@@ -1570,6 +1864,8 @@
   // Session end overlay
   // =========================================================
   function endSession(){
+    emitLearning("session-end", {startedAt:state.sessionStartedAt});
+    state.sessionStartedAt = 0;
     const totalSec = state.stats.elapsedSec;
     clearTimers();
 
