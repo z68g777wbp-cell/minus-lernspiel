@@ -16,7 +16,7 @@
 
   const state = {
     level: 1,
-    roundTaskCount: 20,
+    roundTaskCount: 10, // fest: 10 Aufgaben pro Runde (einheitlich mit Plus)
     animationEnabled: true,
     directMode: false, // Schalter „ohne Rechenschritte“ (Stufen 2, 5, 6)
     startNumber: 0,
@@ -341,25 +341,15 @@
     rightTopButtons.append(homeBtn, fsBtn, pointsBtn, directBtn, nextBtn, endBtn);
     topRight.appendChild(rightTopButtons);
 
-    const roundControls = document.createElement("div");
-    roundControls.id = "roundCountControls";
-    roundControls.setAttribute("aria-label", "Aufgaben pro Runde");
-    [5, 10, 20].forEach(count => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "roundCountBtn";
-      b.dataset.roundCount = String(count);
-      b.textContent = String(count);
-      b.setAttribute("aria-label", `${count} Aufgaben pro Runde`);
-      b.onclick = () => setRoundTaskCount(count);
-      roundControls.appendChild(b);
-    });
-    topRight.appendChild(roundControls);
     updateAnimationButton();
-    updateRoundCountButtons();
 
     // content
     leftCol.appendChild(vizPanel);
+    // Fortschritt oben wie im Plus-Spiel: „Aufgabe 3 von 10“ und Punkte.
+    const progressRow = document.createElement("div");
+    progressRow.id = "progressRow";
+    progressRow.innerHTML = '<span id="progressText"></span><span id="progressDots" aria-hidden="true"></span>';
+    midCol.appendChild(progressRow);
     midCol.appendChild(app);
     rightCol.appendChild(buildKeypad());
 
@@ -403,7 +393,16 @@
     del.textContent="⌫";
     del.onclick=()=>keypadDelete();
 
+    const clr=document.createElement("button");
+    clr.className="keyBtn";
+    clr.id="keyClear";
+    clr.dataset.key="clear";
+    clr.textContent="C";
+    clr.setAttribute("aria-label","Eingabe löschen");
+    clr.onclick=()=>keypadClear();
+
     bottom.appendChild(zero);
+    bottom.appendChild(clr);
     bottom.appendChild(del);
 
     kp.appendChild(grid);
@@ -429,6 +428,12 @@
     const inp=getActiveInput();
     if(!inp) return;
     inp.value=(inp.value ?? "") + d;
+    inp.dispatchEvent(new Event("input",{bubbles:true}));
+  }
+  function keypadClear(){
+    const inp=getActiveInput();
+    if(!inp) return;
+    inp.value="";
     inp.dispatchEvent(new Event("input",{bubbles:true}));
   }
   function keypadDelete(){
@@ -790,6 +795,13 @@
   function updateCounters(){
     okCountEl.textContent = String(state.stats.correct);
     badCountEl.textContent = String(state.stats.wrong);
+    updateProgress();
+  }
+  function updateProgress(){
+    const total = state.roundTaskCount, done = Math.min(state.stats.completed, total);
+    const t = document.getElementById("progressText"), d = document.getElementById("progressDots");
+    if(t) t.textContent = `Aufgabe ${Math.min(done + 1, total)} von ${total}`;
+    if(d) d.textContent = "●".repeat(done) + "○".repeat(total - done);
   }
   function fmtTime(sec){
     const m=Math.floor(sec/60);

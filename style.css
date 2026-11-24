@@ -934,3 +934,35 @@ html.is-fullscreen #appShell{
 }
 #fsBtn .fsIcon{ display:block; }
 #rightTopButtons #fsBtn:disabled{ opacity:.35; cursor:default; }
+
+/* =====================================================================
+   Einheitliches Layout wie im Plus-Spiel (v0.6.3):
+   Fortschritt oben in der Rechenspalte, Ziffernfeld unten über die ganze Breite
+   (quer: eine Zeile, hoch: zwei Zeilen), Taste C zum Löschen.
+   ===================================================================== */
+#roundCountControls{display:none !important}
+#midCol{display:flex !important;flex-direction:column;gap:6px}
+#progressRow{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 10px;padding:12px 18px 0;color:#64748b;font-weight:750;font-size:clamp(12px,1.7vh,15px)}
+#progressDots{letter-spacing:1px;font-size:12px;color:#94a3b8}
+#midCol #app{flex:1 1 auto;min-height:0}
+#keypad .keyBtn[data-key]{grid-row:auto !important;grid-column:auto !important}
+#keypad .keyBtn[data-key="clear"]{background:#e7edf5;color:#1e293b}
+@media (orientation: landscape){
+  #appShell #contentRow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;grid-template-rows:minmax(0,1fr) auto !important}
+  #appShell #leftCol{grid-column:1;grid-row:1}
+  #appShell #midCol{grid-column:2;grid-row:1}
+  #appShell #rightCol{grid-column:1 / -1 !important;grid-row:2 !important;padding:8px 10px}
+  #appShell #keypad{width:100% !important;margin:0 !important;display:grid !important;grid-template-columns:repeat(12,minmax(0,1fr)) !important;grid-template-rows:clamp(44px,7vh,60px) !important;gap:8px}
+}
+@media (orientation: portrait){
+  #appShell #keypad{grid-template-columns:repeat(6,minmax(0,1fr)) !important}
+}
+#appShell #progressRow{align-self:stretch;width:100%;box-sizing:border-box}
+#topRight{display:flex !important;justify-content:center !important}
+#rightTopButtons{width:auto !important}
+#rightTopButtons .ctrlBtn{width:auto !important;min-width:64px !important;flex:0 0 auto}
+#rightTopButtons #endBtn{min-width:112px !important}
+#topRight{background:transparent !important}
+#rightTopButtons .ctrlBtn, #rightTopButtons #pointsBtn{flex:0 0 auto !important;width:64px !important;min-width:64px !important}
+#rightTopButtons #endBtn{width:112px !important}
+#topRight{width:auto !important}
